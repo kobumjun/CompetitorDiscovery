@@ -5,6 +5,9 @@ import { scrapeThread } from "@/lib/scraper";
 import { analyzeThread } from "@/lib/openai";
 import { deductCredits, addCredits } from "@/lib/credits";
 
+/** Allow long-running scrape + LLM on Vercel (configure plan / dashboard as needed). */
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -20,10 +23,7 @@ export async function POST(request: NextRequest) {
     const { url } = body;
 
     if (!url) {
-      return NextResponse.json(
-        { error: "URL is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
 
     const postId = extractPostId(url);
@@ -66,48 +66,71 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    runAnalysis(analysis.id, postId, user.id).catch(console.error);
+    const analysisId = analysis.id as string;
 
-    return NextResponse.json({
-      id: analysis.id,
-      status: "processing",
-    });
+    try {
+      const threadData = await scrapeThread(postId);
+      const results = await analyzeThread(threadData);
+
+      const { error: updateError } = await serviceClient
+        .from("analyses")
+        .update({
+          status: "completed",
+          results,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", analysisId);
+
+      if (updateError) {
+        console.error("Failed to persist completed analysis:", updateError);
+        await serviceClient
+          .from("analyses")
+          .update({ status: "failed", completed_at: new Date().toISOString() })
+          .eq("id", analysisId);
+        await addCredits(user.id, 1);
+        return NextResponse.json(
+          {
+            id: analysisId,
+            status: "failed",
+            error: "Failed to save analysis results",
+          },
+          { status: 200 }
+        );
+      }
+
+      return NextResponse.json({
+        id: analysisId,
+        status: "completed",
+      });
+    } catch (err) {
+      console.error(`Analysis ${analysisId} failed:`, err);
+      const message =
+        err instanceof Error ? err.message : "Analysis failed";
+
+      await serviceClient
+        .from("analyses")
+        .update({
+          status: "failed",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", analysisId);
+
+      await addCredits(user.id, 1);
+
+      return NextResponse.json(
+        {
+          id: analysisId,
+          status: "failed",
+          error: message,
+        },
+        { status: 200 }
+      );
+    }
   } catch (error) {
     console.error("Analyze error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     );
-  }
-}
-
-async function runAnalysis(
-  analysisId: string,
-  postId: string,
-  userId: string
-) {
-  const serviceClient = await createServiceClient();
-
-  try {
-    const threadData = await scrapeThread(postId);
-    const results = await analyzeThread(threadData);
-
-    await serviceClient
-      .from("analyses")
-      .update({
-        status: "completed",
-        results,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", analysisId);
-  } catch (error) {
-    console.error(`Analysis ${analysisId} failed:`, error);
-
-    await serviceClient
-      .from("analyses")
-      .update({ status: "failed" })
-      .eq("id", analysisId);
-
-    await addCredits(userId, 1);
   }
 }
