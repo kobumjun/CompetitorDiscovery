@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   Crosshair,
   Check,
-  ChevronRight,
   Zap,
   Shield,
   RefreshCcw,
@@ -12,6 +11,8 @@ import {
 } from "lucide-react";
 import { PLANS } from "@/types";
 import { cn } from "@/lib/utils";
+import { PlanCheckoutButton } from "@/components/plan-checkout-button";
+import type { PaidPlan } from "@/lib/lemonsqueezy";
 
 const FAQS = [
   {
@@ -107,16 +108,10 @@ export default function PricingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link
-                  href="/signup"
-                  className={cn(
-                    "w-full text-center",
-                    plan.popular ? "btn-primary" : "btn-secondary"
-                  )}
-                >
-                  Get Started
-                  <ChevronRight className="w-4 h-4" />
-                </Link>
+                <PlanCheckoutButton
+                  plan={plan.type as PaidPlan}
+                  popular={plan.popular}
+                />
               </div>
             ))}
           </div>

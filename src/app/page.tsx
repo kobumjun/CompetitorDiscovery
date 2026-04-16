@@ -16,11 +16,10 @@ import {
   TrendingUp,
   Users,
   Zap,
-  ChevronRight,
-  Globe,
-  ExternalLink,
 } from "lucide-react";
 import { PLANS } from "@/types";
+import { PlanCheckoutButton } from "@/components/plan-checkout-button";
+import type { PaidPlan } from "@/lib/lemonsqueezy";
 
 const EXAMPLE_COMPETITORS = [
   { name: "ShipFast", category: "Boilerplate", stage: "Growing" },
@@ -420,13 +419,10 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link
-                  href="/signup"
-                  className={plan.popular ? "btn-primary w-full text-center" : "btn-secondary w-full text-center"}
-                >
-                  Get Started
-                  <ChevronRight className="w-4 h-4" />
-                </Link>
+                <PlanCheckoutButton
+                  plan={plan.type as PaidPlan}
+                  popular={plan.popular}
+                />
               </div>
             ))}
           </div>
