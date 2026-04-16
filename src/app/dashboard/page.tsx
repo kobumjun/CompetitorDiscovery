@@ -97,9 +97,9 @@ export default function DashboardPage() {
     <div className="max-w-4xl mx-auto px-6 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-display font-bold text-ink-900">Market Intelligence</h1>
+        <h1 className="text-display font-bold text-ink-900">Lead Extraction</h1>
         <p className="text-ink-500 mt-1">
-          Analyze any X builder thread for competitive insights
+          Analyze public X threads and extract outreach-ready prospects
         </p>
       </div>
 
@@ -130,7 +130,7 @@ export default function DashboardPage() {
               </>
             ) : (
               <>
-                Analyze Thread
+                Extract Leads
                 <ArrowRight className="w-5 h-5" />
               </>
             )}
@@ -145,7 +145,7 @@ export default function DashboardPage() {
         )}
 
         <p className="text-xs text-ink-400 mt-3">
-          Supports any public X/Twitter post URL with replies. Each analysis uses 1 credit.
+          Supports public X/Twitter threads with replies. One thread analysis costs 1 credit.
         </p>
       </form>
 
@@ -207,9 +207,9 @@ export default function DashboardPage() {
         ) : analyses.length === 0 ? (
           <div className="card p-12 text-center">
             <Target className="w-10 h-10 text-ink-300 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-ink-700 mb-1">No analyses yet</h3>
+            <h3 className="text-base font-semibold text-ink-700 mb-1">No lead runs yet</h3>
             <p className="text-sm text-ink-400">
-              Paste a thread URL above to get started
+              Paste a public thread URL above to start extracting leads
             </p>
           </div>
         ) : (
@@ -240,7 +240,7 @@ export default function DashboardPage() {
                       </span>
                       {analysis.status === "completed" && analysis.results && (
                         <span className="text-xs text-ink-500">
-                          {analysis.results.competitors?.length || 0} competitors
+                          {(analysis.results as any).leadSummary?.totalLeads || 0} leads
                         </span>
                       )}
                     </div>

@@ -28,13 +28,13 @@ export type AnalysisStatus = "pending" | "processing" | "completed" | "failed";
 
 export interface AnalysisResult {
   threadInfo: ThreadInfo;
-  marketBriefing: MarketBriefing;
-  competitors: Competitor[];
-  categories: MarketCategory[];
-  marketNeeds: MarketNeed[];
-  positioningPatterns: PositioningPattern[];
-  differentiationOpportunities: DifferentiationOpportunity[];
-  productIdeas: ProductIdea[];
+  leadSummary: LeadSummary;
+  briefing: LeadBriefing;
+  leads: Lead[];
+  intentBreakdown: IntentBreakdownItem[];
+  problemCategories: ProblemCategoryBreakdownItem[];
+  outreachAngles: OutreachAngleItem[];
+  draftMessages: DraftMessageItem[];
 }
 
 export interface ThreadInfo {
@@ -46,65 +46,76 @@ export interface ThreadInfo {
   analyzedAt: string;
 }
 
-export interface MarketBriefing {
+export type IntentType =
+  | "looking_for_service"
+  | "asking_for_recommendation"
+  | "expressing_pain_point"
+  | "comparing_tools"
+  | "actively_evaluating"
+  | "potential_future_need";
+
+export type ProblemCategory =
+  | "web_development"
+  | "design"
+  | "automation"
+  | "ai_tooling"
+  | "marketing"
+  | "lead_generation"
+  | "operations"
+  | "other";
+
+export type LeadScoreBand = "high" | "medium" | "low";
+
+export interface LeadSummary {
+  totalLeads: number;
+  highIntentLeads: number;
+  mediumIntentLeads: number;
+  lowIntentLeads: number;
+}
+
+export interface LeadBriefing {
   summary: string;
-  keyTakeaways: string[];
-  marketSentiment: "bullish" | "bearish" | "neutral" | "mixed";
-  emergingTrends: string[];
-  threatLevel: "low" | "moderate" | "high" | "critical";
+  keySignals: string[];
+  recommendedNextActions: string[];
 }
 
-export interface Competitor {
-  name: string;
-  description: string;
-  url: string | null;
-  category: string;
-  stage: "idea" | "building" | "launched" | "growing" | "established";
-  positioning: string;
-  mentionCount: number;
-  tags: string[];
+export interface Lead {
+  displayName: string;
+  handle: string;
+  quotedText: string;
+  leadScore: number;
+  scoreBand: LeadScoreBand;
+  intentType: IntentType;
+  problemCategory: ProblemCategory;
+  suggestedOutreachAngle: string;
+  profileLink: string;
+  postLink: string | null;
+  outreachDraft: string | null;
 }
 
-export interface MarketCategory {
-  name: string;
+export interface IntentBreakdownItem {
+  intentType: IntentType;
   count: number;
   percentage: number;
-  examples: string[];
-  trend: "rising" | "stable" | "declining";
 }
 
-export interface MarketNeed {
-  need: string;
-  frequency: "very_common" | "common" | "occasional" | "rare";
-  urgency: "critical" | "high" | "medium" | "low";
-  relatedProducts: string[];
-  opportunityNote: string;
+export interface ProblemCategoryBreakdownItem {
+  category: ProblemCategory;
+  count: number;
+  percentage: number;
 }
 
-export interface PositioningPattern {
-  pattern: string;
-  description: string;
-  examples: string[];
-  effectiveness: "strong" | "moderate" | "weak";
-  saturation: "oversaturated" | "competitive" | "open";
+export interface OutreachAngleItem {
+  angle: string;
+  whyItWorks: string;
+  bestForIntentTypes: IntentType[];
 }
 
-export interface DifferentiationOpportunity {
-  opportunity: string;
-  rationale: string;
-  difficulty: "easy" | "medium" | "hard";
-  potentialImpact: "high" | "medium" | "low";
-  suggestedApproach: string;
-}
-
-export interface ProductIdea {
-  idea: string;
-  description: string;
-  targetAudience: string;
-  marketGap: string;
-  competitiveAdvantage: string;
-  estimatedDifficulty: "low" | "medium" | "high";
-  revenueModel: string;
+export interface DraftMessageItem {
+  leadHandle: string;
+  intentType: IntentType;
+  channel: "dm" | "email";
+  message: string;
 }
 
 export interface Subscription {
@@ -159,9 +170,9 @@ export const PLANS: PlanConfig[] = [
     variantIdEnvKey: "LEMONSQUEEZY_LITE_VARIANT_ID",
     features: [
       "60 thread analyses / month",
-      "Full competitor mapping",
-      "Market briefing reports",
-      "Category & trend analysis",
+      "Lead extraction from public threads",
+      "Buyer intent scoring (high/medium/low)",
+      "Outreach angle suggestions",
       "7-day history retention",
     ],
   },
@@ -175,11 +186,11 @@ export const PLANS: PlanConfig[] = [
     variantIdEnvKey: "LEMONSQUEEZY_STANDARD_VARIANT_ID",
     features: [
       "190 thread analyses / month",
-      "Full competitor mapping",
-      "Market briefing reports",
-      "Category & trend analysis",
-      "Positioning pattern detection",
-      "Product idea generation",
+      "Lead extraction from public threads",
+      "Buyer intent scoring (high/medium/low)",
+      "Intent + problem category breakdown",
+      "Outreach angle suggestions",
+      "Draft DM suggestions",
       "30-day history retention",
       "Export to CSV / JSON",
     ],
@@ -193,12 +204,12 @@ export const PLANS: PlanConfig[] = [
     variantIdEnvKey: "LEMONSQUEEZY_PRO_VARIANT_ID",
     features: [
       "560 thread analyses / month",
-      "Full competitor mapping",
-      "Market briefing reports",
-      "Category & trend analysis",
-      "Positioning pattern detection",
-      "Product idea generation",
-      "Differentiation opportunities",
+      "Lead extraction from public threads",
+      "Buyer intent scoring (high/medium/low)",
+      "Intent + problem category breakdown",
+      "Outreach angle suggestions",
+      "Draft DM suggestions",
+      "Priority lead scoring",
       "Unlimited history retention",
       "Export to CSV / JSON",
       "Priority processing",

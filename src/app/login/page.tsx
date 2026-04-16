@@ -44,7 +44,7 @@ export default function LoginPage() {
           </Link>
           <h1 className="text-heading font-bold text-ink-900">Welcome back</h1>
           <p className="text-sm text-ink-500 mt-1">
-            Sign in to access your market intelligence
+            Sign in to access your lead extraction workspace
           </p>
         </div>
 

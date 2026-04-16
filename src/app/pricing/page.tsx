@@ -18,7 +18,7 @@ import { SiteFooter } from "@/components/site-footer";
 const FAQS = [
   {
     q: "What counts as one analysis?",
-    a: "One analysis = one X/Twitter thread URL processed. We scrape the original post and all replies, then run our AI analysis to generate the full market intelligence report.",
+    a: "One analysis = one public X/Twitter thread URL processed. We read replies and return qualified leads, buyer-intent signals, and outreach-ready suggestions.",
   },
   {
     q: "Do unused credits roll over?",
@@ -129,7 +129,7 @@ export default function PricingPage() {
             {[
               {
                 icon: Zap,
-                title: "Instant Analysis",
+                title: "Instant Lead Extraction",
                 desc: "Results in under 30 seconds",
               },
               {

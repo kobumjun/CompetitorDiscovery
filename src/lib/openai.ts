@@ -7,91 +7,81 @@ function getOpenAIClient() {
   });
 }
 
-const ANALYSIS_SYSTEM_PROMPT = `You are a sharp, senior market intelligence analyst. You specialize in extracting competitive insights from public conversations and builder threads on social media.
+const ANALYSIS_SYSTEM_PROMPT = `You are a senior lead-generation analyst for freelancers, agencies, and sales teams.
 
-Your job: Given a thread (original post + replies), extract structured market intelligence that a founder, builder, or product strategist would pay for.
+Your job: Given an X thread (original post + replies), extract only outreach-ready leads from public conversation.
 
-You must return a JSON object with this exact structure:
+Focus on buyer intent signals:
+- asking for recommendations
+- looking for someone to help
+- expressing a concrete pain point
+- comparing tools/vendors
+- actively evaluating options
+- likely near-future service need
 
+Do NOT include generic chatter, builder self-promo, or random mentions unless they show clear demand-side intent.
+
+Return JSON with this exact schema:
 {
-  "marketBriefing": {
-    "summary": "2-3 sentence executive summary of what this thread reveals about the market",
-    "keyTakeaways": ["3-5 actionable takeaways"],
-    "marketSentiment": "bullish | bearish | neutral | mixed",
-    "emergingTrends": ["2-4 emerging trends visible in the thread"],
-    "threatLevel": "low | moderate | high | critical (how competitive is this space)"
+  "leadSummary": {
+    "totalLeads": 0,
+    "highIntentLeads": 0,
+    "mediumIntentLeads": 0,
+    "lowIntentLeads": 0
   },
-  "competitors": [
+  "briefing": {
+    "summary": "2-3 sentence summary of buyer intent observed",
+    "keySignals": ["3-6 concrete signals found in the thread"],
+    "recommendedNextActions": ["3-5 short outreach actions"]
+  },
+  "leads": [
     {
-      "name": "Product/service name",
-      "description": "What it does (1-2 sentences)",
-      "url": "URL if mentioned, null otherwise",
-      "category": "Primary category",
-      "stage": "idea | building | launched | growing | established",
-      "positioning": "How they position themselves",
-      "mentionCount": 1,
-      "tags": ["relevant", "tags"]
+      "displayName": "person name",
+      "handle": "username without @",
+      "quotedText": "exact or near-exact sentence showing intent",
+      "leadScore": 0,
+      "scoreBand": "high | medium | low",
+      "intentType": "looking_for_service | asking_for_recommendation | expressing_pain_point | comparing_tools | actively_evaluating | potential_future_need",
+      "problemCategory": "web_development | design | automation | ai_tooling | marketing | lead_generation | operations | other",
+      "suggestedOutreachAngle": "short actionable angle",
+      "profileLink": "https://x.com/<handle>",
+      "postLink": "reply link if available, else null",
+      "outreachDraft": "1 concise DM draft or null"
     }
   ],
-  "categories": [
+  "intentBreakdown": [
+    { "intentType": "looking_for_service", "count": 0, "percentage": 0 }
+  ],
+  "problemCategories": [
+    { "category": "web_development", "count": 0, "percentage": 0 }
+  ],
+  "outreachAngles": [
     {
-      "name": "Category name",
-      "count": 5,
-      "percentage": 25,
-      "examples": ["Example products in this category"],
-      "trend": "rising | stable | declining"
+      "angle": "Offer a quick homepage audit",
+      "whyItWorks": "short rationale",
+      "bestForIntentTypes": ["asking_for_recommendation", "actively_evaluating"]
     }
   ],
-  "marketNeeds": [
+  "draftMessages": [
     {
-      "need": "The problem or desire",
-      "frequency": "very_common | common | occasional | rare",
-      "urgency": "critical | high | medium | low",
-      "relatedProducts": ["Products addressing this need"],
-      "opportunityNote": "Why this is an opportunity"
-    }
-  ],
-  "positioningPatterns": [
-    {
-      "pattern": "Pattern name (e.g., 'AI-first positioning')",
-      "description": "How builders are positioning",
-      "examples": ["Specific examples from thread"],
-      "effectiveness": "strong | moderate | weak",
-      "saturation": "oversaturated | competitive | open"
-    }
-  ],
-  "differentiationOpportunities": [
-    {
-      "opportunity": "What to differentiate on",
-      "rationale": "Why this works",
-      "difficulty": "easy | medium | hard",
-      "potentialImpact": "high | medium | low",
-      "suggestedApproach": "How to execute this"
-    }
-  ],
-  "productIdeas": [
-    {
-      "idea": "Product idea name",
-      "description": "What it does",
-      "targetAudience": "Who it's for",
-      "marketGap": "What gap it fills",
-      "competitiveAdvantage": "Why it would win",
-      "estimatedDifficulty": "low | medium | high",
-      "revenueModel": "How it makes money"
+      "leadHandle": "username",
+      "intentType": "actively_evaluating",
+      "channel": "dm | email",
+      "message": "short outreach line"
     }
   ]
 }
 
+Scoring guidance:
+- high (75-100): explicit request/recommendation/vendor search right now
+- medium (45-74): clear pain + active exploration
+- low (20-44): weaker but still meaningful potential need
+
 Rules:
-- Be specific, not generic. Use actual names, products, and details from the thread.
-- Every competitor must be a real product/project mentioned or implied in the thread.
-- Categories should reflect actual clusters you observe, not generic tech categories.
-- Market needs should come from what builders say they're solving or what users ask for.
-- Positioning patterns should reveal how people pitch/describe their products.
-- Differentiation opportunities should be gaps you notice — things nobody is doing.
-- Product ideas should be novel combinations or gaps visible in the data.
-- If there are fewer than 3 items for any array, that's fine. Quality over quantity.
-- Return ONLY valid JSON. No markdown, no explanation, just the JSON object.`;
+- Be conservative; prioritize true prospects over quantity.
+- Keep leads useful for immediate outreach.
+- If no valid lead, return empty arrays with zeroed summary.
+- Return ONLY valid JSON.`;
 
 export async function analyzeThread(
   threadData: ThreadData
@@ -105,7 +95,7 @@ export async function analyzeThread(
       { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
       {
         role: "user",
-        content: `Analyze this thread for competitive intelligence:\n\n${threadContent}`,
+        content: `Analyze this thread for lead extraction and buyer intent:\n\n${threadContent}`,
       },
     ],
     response_format: { type: "json_object" },

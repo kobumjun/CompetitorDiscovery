@@ -23,50 +23,50 @@ import type { PaidPlan } from "@/lib/lemonsqueezy";
 import { SiteFooter } from "@/components/site-footer";
 
 const EXAMPLE_COMPETITORS = [
-  { name: "ShipFast", category: "Boilerplate", stage: "Growing" },
-  { name: "LaunchKit", category: "Launch Tools", stage: "Building" },
-  { name: "BuilderOS", category: "Dev Platform", stage: "Launched" },
-  { name: "IndieStack", category: "Full-Stack", stage: "Idea" },
-  { name: "QuickShip", category: "Boilerplate", stage: "Growing" },
-  { name: "FounderAI", category: "AI Tools", stage: "Launched" },
-  { name: "MicroSaaS Kit", category: "SaaS Framework", stage: "Building" },
-  { name: "RapidMVP", category: "Prototyping", stage: "Launched" },
+  { name: "Mina Park", category: "Web Development", stage: "High intent" },
+  { name: "Joon Kim", category: "Design", stage: "High intent" },
+  { name: "Alex Lee", category: "Automation", stage: "Medium intent" },
+  { name: "Dana Choi", category: "Marketing", stage: "Medium intent" },
+  { name: "Chris Shin", category: "AI Tooling", stage: "Low intent" },
+  { name: "Nate Jung", category: "Operations", stage: "Medium intent" },
+  { name: "Ella Han", category: "Lead Gen", stage: "High intent" },
+  { name: "Tom Song", category: "Web Development", stage: "Low intent" },
 ];
 
 const EXAMPLE_CATEGORIES = [
-  { name: "SaaS Boilerplates", pct: 32, color: "bg-brand-500" },
-  { name: "AI-Powered Tools", pct: 25, color: "bg-blue-500" },
-  { name: "Developer Platforms", pct: 18, color: "bg-emerald-500" },
-  { name: "Marketing Automation", pct: 15, color: "bg-violet-500" },
-  { name: "Analytics & BI", pct: 10, color: "bg-amber-500" },
+  { name: "Web Development", pct: 31, color: "bg-brand-500" },
+  { name: "Automation", pct: 24, color: "bg-blue-500" },
+  { name: "Design", pct: 18, color: "bg-emerald-500" },
+  { name: "Marketing", pct: 16, color: "bg-violet-500" },
+  { name: "Operations", pct: 11, color: "bg-amber-500" },
 ];
 
 const EXAMPLE_PATTERNS = [
-  "AI-first positioning",
-  "Speed-to-market focus",
-  "Developer experience",
-  "No-code friendly",
-  "Open source core",
-  "Vertical SaaS",
-  "API-first",
-  "Community-driven",
+  "Asking for trusted freelancer",
+  "Need help this week",
+  "Seeking recommendation",
+  "Comparing vendor options",
+  "Pain point escalation",
+  "Budget-ready project",
+  "Looking for specialist",
+  "Open to DM follow-up",
 ];
 
 const EXAMPLE_IDEAS = [
   {
-    name: "ThreadRadar",
-    desc: "Real-time monitoring of builder threads for competitive moves",
-    audience: "Product teams at startups",
+    name: "Quick homepage audit",
+    desc: "Offer a fast conversion + UX review to high-intent leads",
+    audience: "Founders asking for web help",
   },
   {
-    name: "NicheMapper",
-    desc: "Visual market map generated from social conversations",
-    audience: "Solo founders exploring markets",
+    name: "Automation teardown",
+    desc: "Show one workflow you can automate in 48 hours",
+    audience: "Ops-heavy solo teams",
   },
   {
-    name: "PitchLens",
-    desc: "Analyze how competitors pitch and find messaging gaps",
-    audience: "Marketing teams",
+    name: "Design refresh proposal",
+    desc: "Send before/after direction for pages they complained about",
+    audience: "Startup teams with design pain",
   },
 ];
 
@@ -109,15 +109,15 @@ export default function LandingPage() {
         <div className="relative max-w-4xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-50 border border-brand-200 rounded-full text-xs font-semibold text-brand-700 mb-6">
             <Zap className="w-3.5 h-3.5" />
-            Market intelligence from public conversations
+            Buyer-intent extraction from public conversations
           </div>
           <h1 className="text-display-xl font-black text-ink-900 mb-6 leading-tight">
-            Turn any builder thread into{" "}
-            <span className="gradient-text">competitive intelligence</span>
+            Turn any X thread into{" "}
+            <span className="gradient-text">qualified leads</span>
           </h1>
           <p className="text-lg md:text-xl text-ink-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Paste an X thread URL. Get a structured market map — competitors,
-            positioning patterns, product opportunities — in seconds.
+            Paste an X thread URL. Get outreach-ready prospects with intent score,
+            pain category, and messaging angle in seconds.
           </p>
           <div className="max-w-xl mx-auto mb-4">
             <div className="flex gap-2 p-2 bg-white border border-surface-200 rounded-xl shadow-elevated">
@@ -128,7 +128,7 @@ export default function LandingPage() {
                 </span>
               </div>
               <Link href="/signup" className="btn-primary whitespace-nowrap">
-                Analyze Thread
+                Extract Leads
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -145,8 +145,8 @@ export default function LandingPage() {
           <div className="grid grid-cols-3 gap-8">
             {[
               { icon: Target, value: "200+", label: "Threads analyzed" },
-              { icon: Users, value: "1,500+", label: "Competitors discovered" },
-              { icon: BarChart3, value: "50+", label: "Categories mapped" },
+              { icon: Users, value: "4,800+", label: "Leads extracted" },
+              { icon: BarChart3, value: "1,600+", label: "High-intent leads flagged" },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <div className="flex items-center justify-center gap-2 mb-1">
@@ -166,7 +166,7 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <p className="section-title mb-3">How It Works</p>
             <h2 className="text-display font-bold text-ink-900">
-              From thread to market map in 3 steps
+              From thread to outreach-ready list in 3 steps
             </h2>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -175,19 +175,19 @@ export default function LandingPage() {
                 step: "01",
                 icon: Link2,
                 title: "Paste a Thread URL",
-                desc: 'Drop any X builder thread — "what are you building?" posts, product launches, founder discussions.',
+                desc: "Drop any public X thread where people discuss problems, ask for recommendations, or seek help.",
               },
               {
                 step: "02",
                 icon: Cpu,
                 title: "AI Analyzes the Conversation",
-                desc: "Our engine reads every reply, extracts products, categorizes mentions, and maps the competitive landscape.",
+                desc: "Our engine reads each reply and flags purchase intent, pain signals, and service-seeking behavior.",
               },
               {
                 step: "03",
                 icon: BarChart3,
-                title: "Get Structured Intelligence",
-                desc: "Receive a full market briefing: competitors, categories, positioning patterns, and product ideas.",
+                title: "Get Structured Leads",
+                desc: "Receive ranked leads with intent type, problem category, outreach angles, and draft DM messages.",
               },
             ].map((item) => (
               <div key={item.step} className="relative">
@@ -217,7 +217,7 @@ export default function LandingPage() {
               Here&apos;s what you get from a single thread
             </h2>
             <p className="text-ink-400 max-w-xl mx-auto">
-              Real structured data from a &ldquo;What are you building?&rdquo; thread
+              Real structured leads from a public thread
               with 150+ replies.
             </p>
           </div>
@@ -225,10 +225,10 @@ export default function LandingPage() {
           {/* Stat Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[
-              { value: "12", label: "Competitors Found", color: "text-brand-400" },
-              { value: "5", label: "Market Categories", color: "text-blue-400" },
-              { value: "8", label: "Positioning Patterns", color: "text-emerald-400" },
-              { value: "3", label: "Product Ideas", color: "text-violet-400" },
+              { value: "42", label: "Qualified Leads", color: "text-brand-400" },
+              { value: "16", label: "High-Intent Leads", color: "text-blue-400" },
+              { value: "6", label: "Intent Types", color: "text-emerald-400" },
+              { value: "8", label: "Outreach Angles", color: "text-violet-400" },
             ].map((s) => (
               <div key={s.label} className="bg-white/5 border border-white/10 rounded-xl p-5">
                 <div className={`text-3xl font-bold ${s.color} mb-1`}>{s.value}</div>
@@ -238,11 +238,11 @@ export default function LandingPage() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Competitors Preview */}
+            {/* Leads Preview */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
               <h3 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
                 <Target className="w-4 h-4 text-brand-400" />
-                Competitor Map
+                Lead List
               </h3>
               <div className="space-y-3">
                 {EXAMPLE_COMPETITORS.slice(0, 5).map((c) => (
@@ -264,11 +264,11 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Categories Preview */}
+            {/* Problem Categories Preview */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
               <h3 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-blue-400" />
-                Market Categories
+                Problem Categories
               </h3>
               <div className="space-y-4">
                 {EXAMPLE_CATEGORIES.map((cat) => (
@@ -288,11 +288,11 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Positioning Patterns */}
+            {/* Intent Patterns */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
               <h3 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-emerald-400" />
-                Positioning Patterns
+                Intent Signals
               </h3>
               <div className="flex flex-wrap gap-2">
                 {EXAMPLE_PATTERNS.map((p) => (
@@ -303,11 +303,11 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Product Ideas */}
+            {/* Outreach Ideas */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
               <h3 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
                 <Lightbulb className="w-4 h-4 text-violet-400" />
-                Product Ideas
+                Outreach Angles
               </h3>
               <div className="space-y-4">
                 {EXAMPLE_IDEAS.map((idea) => (
@@ -329,40 +329,40 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <p className="section-title mb-3">Capabilities</p>
             <h2 className="text-display font-bold text-ink-900">
-              Everything you need to read the market
+              Everything you need to find likely buyers
             </h2>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
               {
                 icon: FileText,
-                title: "Market Briefing",
-                desc: "Executive-level summary of market dynamics, sentiment, and emerging trends from the thread.",
+                title: "Lead Summary",
+                desc: "Instant summary of total leads and intent distribution from one public thread.",
               },
               {
                 icon: Target,
-                title: "Competitor Mapping",
-                desc: "Every product and service mentioned, categorized with stage, positioning, and relevance score.",
+                title: "Qualified Lead List",
+                desc: "Extract people with strong service-seeking signals and rank them for fast outreach.",
               },
               {
                 icon: BarChart3,
-                title: "Category Analysis",
-                desc: "Automatic clustering of products into market categories with trend indicators and saturation levels.",
+                title: "Intent Classification",
+                desc: "Classify each lead by intent type: recommendation ask, active evaluation, pain point, and more.",
               },
               {
                 icon: Search,
-                title: "Need Detection",
-                desc: "Surface recurring problems, desires, and unmet needs from what builders and users are saying.",
+                title: "Problem Detection",
+                desc: "Understand what each lead is struggling with so your message is directly relevant.",
               },
               {
                 icon: Layers,
-                title: "Positioning Patterns",
-                desc: "Discover how builders pitch their products and where messaging saturation creates openings.",
+                title: "Outreach Angle Suggestions",
+                desc: "Get concise outreach directions for each lead based on context and intent strength.",
               },
               {
                 icon: Lightbulb,
-                title: "Idea Generation",
-                desc: "AI-generated product ideas based on gaps, underserved niches, and emerging opportunities.",
+                title: "Draft DM Messages",
+                desc: "Generate short, usable DM-style drafts so you can move from signal to action quickly.",
               },
             ].map((feature) => (
               <div key={feature.title} className="card p-6 group hover:shadow-card-hover transition-all">
@@ -440,8 +440,8 @@ export default function LandingPage() {
             Ready to decode your market?
           </h2>
           <p className="text-lg text-ink-500 mb-8 max-w-lg mx-auto">
-            Stop guessing who your competitors are. Start extracting real intelligence
-            from the conversations already happening.
+            Stop reading 100+ comments manually. Start extracting the people most
+            likely to buy your service.
           </p>
           <Link href="/signup" className="btn-primary text-base px-8 py-3">
             Start Free — 3 Analyses Included

@@ -71,7 +71,7 @@ export default function SignupPage() {
             <span className="text-xl font-bold text-ink-900">ThreadScope</span>
           </Link>
           <h1 className="text-heading font-bold text-ink-900">
-            Start discovering competitors
+            Start extracting qualified leads
           </h1>
           <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 bg-brand-50 border border-brand-200 rounded-full">
             <Sparkles className="w-3.5 h-3.5 text-brand-600" />

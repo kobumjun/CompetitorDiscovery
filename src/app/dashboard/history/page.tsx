@@ -73,8 +73,8 @@ export default function HistoryPage() {
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
       <div className="mb-6">
-        <h1 className="text-display font-bold text-ink-900">Analysis History</h1>
-        <p className="text-ink-500 mt-1">All your thread analyses in one place</p>
+        <h1 className="text-display font-bold text-ink-900">Lead Extraction History</h1>
+        <p className="text-ink-500 mt-1">All your analyzed threads and lead outputs in one place</p>
       </div>
 
       {/* Filters */}
@@ -146,7 +146,12 @@ export default function HistoryPage() {
                       </span>
                       {analysis.status === "completed" && analysis.results && (
                         <span className="text-xs text-ink-500">
-                          {(analysis.results as any).competitors?.length || 0} competitors
+                          {(analysis.results as any).leadSummary?.totalLeads || 0} leads
+                        </span>
+                      )}
+                      {analysis.status === "completed" && analysis.results && (
+                        <span className="text-xs text-emerald-600">
+                          {(analysis.results as any).leadSummary?.highIntentLeads || 0} high intent
                         </span>
                       )}
                     </div>

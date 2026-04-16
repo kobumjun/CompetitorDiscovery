@@ -2,23 +2,22 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ThreadScope — Competitive Intelligence from X Threads",
+  title: "ThreadScope — Lead Extraction from X Threads",
   description:
-    "Turn any X builder thread into structured market intelligence. Discover competitors, extract positioning patterns, and find product opportunities — all from a single URL.",
+    "Turn any public X thread into outreach-ready leads. Detect buyer intent, prioritize prospects, and send better outreach faster.",
   keywords: [
-    "competitive intelligence",
-    "market research",
+    "lead extraction",
+    "buyer intent",
     "X threads",
     "Twitter threads",
-    "competitor analysis",
-    "builder threads",
-    "product research",
-    "market intelligence",
+    "outreach",
+    "prospecting",
+    "sales intelligence",
   ],
   openGraph: {
-    title: "ThreadScope — Competitive Intelligence from X Threads",
+    title: "ThreadScope — Lead Extraction from X Threads",
     description:
-      "Turn any X builder thread into structured market intelligence.",
+      "Turn any public X thread into outreach-ready leads.",
     type: "website",
   },
 };
