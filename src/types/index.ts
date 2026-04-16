@@ -10,6 +10,8 @@ export interface User {
 
 export type PlanType = "free" | "lite" | "standard" | "pro";
 
+export const INITIAL_FREE_CREDITS = 3;
+
 export interface Analysis {
   id: string;
   user_id: string;
@@ -116,6 +118,26 @@ export interface Subscription {
   updated_at: string;
 }
 
+/** Monthly analyses included per paid plan (single source of truth with `getCreditsForPlan`). */
+export const PLAN_MONTHLY_CREDITS = {
+  lite: 60,
+  standard: 190,
+  pro: 560,
+} as const;
+
+export function planIncludedCredits(plan: PlanType): number {
+  switch (plan) {
+    case "lite":
+      return PLAN_MONTHLY_CREDITS.lite;
+    case "standard":
+      return PLAN_MONTHLY_CREDITS.standard;
+    case "pro":
+      return PLAN_MONTHLY_CREDITS.pro;
+    default:
+      return INITIAL_FREE_CREDITS;
+  }
+}
+
 export interface PlanConfig {
   name: string;
   type: PlanType;
@@ -132,11 +154,11 @@ export const PLANS: PlanConfig[] = [
     name: "Lite",
     type: "lite",
     price: 29,
-    credits: 15,
-    pricePerCredit: "$1.93",
+    credits: PLAN_MONTHLY_CREDITS.lite,
+    pricePerCredit: "$0.48",
     variantIdEnvKey: "LEMONSQUEEZY_LITE_VARIANT_ID",
     features: [
-      "15 thread analyses / month",
+      "60 thread analyses / month",
       "Full competitor mapping",
       "Market briefing reports",
       "Category & trend analysis",
@@ -147,12 +169,12 @@ export const PLANS: PlanConfig[] = [
     name: "Standard",
     type: "standard",
     price: 79,
-    credits: 50,
-    pricePerCredit: "$1.58",
+    credits: PLAN_MONTHLY_CREDITS.standard,
+    pricePerCredit: "$0.42",
     popular: true,
     variantIdEnvKey: "LEMONSQUEEZY_STANDARD_VARIANT_ID",
     features: [
-      "50 thread analyses / month",
+      "190 thread analyses / month",
       "Full competitor mapping",
       "Market briefing reports",
       "Category & trend analysis",
@@ -166,11 +188,11 @@ export const PLANS: PlanConfig[] = [
     name: "Pro",
     type: "pro",
     price: 149,
-    credits: 150,
-    pricePerCredit: "$0.99",
+    credits: PLAN_MONTHLY_CREDITS.pro,
+    pricePerCredit: "$0.27",
     variantIdEnvKey: "LEMONSQUEEZY_PRO_VARIANT_ID",
     features: [
-      "150 thread analyses / month",
+      "560 thread analyses / month",
       "Full competitor mapping",
       "Market briefing reports",
       "Category & trend analysis",
@@ -184,8 +206,6 @@ export const PLANS: PlanConfig[] = [
     ],
   },
 ];
-
-export const INITIAL_FREE_CREDITS = 3;
 
 export interface ThreadData {
   originalPost: {

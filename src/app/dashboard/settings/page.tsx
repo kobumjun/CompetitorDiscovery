@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { User } from "@/types";
+import { planIncludedCredits } from "@/types";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -51,14 +52,7 @@ export default function SettingsPage() {
     router.refresh();
   }
 
-  const maxCredits =
-    user?.plan === "pro"
-      ? 150
-      : user?.plan === "standard"
-      ? 50
-      : user?.plan === "lite"
-      ? 15
-      : 3;
+  const maxCredits = user ? planIncludedCredits(user.plan) : 3;
 
   const creditPercentage = user ? Math.min((user.credits / maxCredits) * 100, 100) : 0;
 

@@ -13,6 +13,7 @@ import { PLANS } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlanCheckoutButton } from "@/components/plan-checkout-button";
 import type { PaidPlan } from "@/lib/lemonsqueezy";
+import { SiteFooter } from "@/components/site-footer";
 
 const FAQS = [
   {
@@ -179,16 +180,14 @@ export default function PricingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="py-8 border-t border-surface-200">
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
+      <footer className="border-t border-surface-200 bg-white">
+        <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Crosshair className="w-5 h-5 text-brand-500" />
             <span className="font-bold text-ink-900">ThreadScope</span>
           </div>
-          <p className="text-sm text-ink-400">
-            &copy; {new Date().getFullYear()} ThreadScope
-          </p>
         </div>
+        <SiteFooter />
       </footer>
     </div>
   );

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { User } from "@/types";
+import { planIncludedCredits } from "@/types";
+import { SiteFooter } from "@/components/site-footer";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
@@ -37,8 +39,7 @@ export function DashboardSidebar({ user }: { user: User }) {
     return pathname.startsWith(href);
   };
 
-  const maxCredits =
-    user.plan === "pro" ? 150 : user.plan === "standard" ? 50 : user.plan === "lite" ? 15 : 3;
+  const maxCredits = planIncludedCredits(user.plan);
   const creditPercentage = Math.min((user.credits / maxCredits) * 100, 100);
 
   return (
@@ -126,6 +127,7 @@ export function DashboardSidebar({ user }: { user: User }) {
             <LogOut className="w-4 h-4" />
           </button>
         </div>
+        <SiteFooter variant="sidebar" />
       </div>
     </aside>
   );

@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import type { User } from "@/types";
+import { PLAN_MONTHLY_CREDITS, type User } from "@/types";
 
 export async function getUserCredits(userId: string): Promise<number> {
   const supabase = await createServiceClient();
@@ -88,11 +88,11 @@ export async function getUserProfile(userId: string): Promise<User> {
 export function getCreditsForPlan(plan: string): number {
   switch (plan) {
     case "lite":
-      return 15;
+      return PLAN_MONTHLY_CREDITS.lite;
     case "standard":
-      return 50;
+      return PLAN_MONTHLY_CREDITS.standard;
     case "pro":
-      return 150;
+      return PLAN_MONTHLY_CREDITS.pro;
     default:
       return 0;
   }

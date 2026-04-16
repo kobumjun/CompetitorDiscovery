@@ -20,6 +20,7 @@ import {
 import { PLANS } from "@/types";
 import { PlanCheckoutButton } from "@/components/plan-checkout-button";
 import type { PaidPlan } from "@/lib/lemonsqueezy";
+import { SiteFooter } from "@/components/site-footer";
 
 const EXAMPLE_COMPETITORS = [
   { name: "ShipFast", category: "Boilerplate", stage: "Growing" },
@@ -451,9 +452,9 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="py-10 border-t border-surface-200">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-surface-200 bg-white">
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Crosshair className="w-5 h-5 text-brand-500" />
               <span className="font-bold text-ink-900">ThreadScope</span>
@@ -463,11 +464,9 @@ export default function LandingPage() {
               <a href="#pricing" className="hover:text-ink-700 transition-colors">Pricing</a>
               <Link href="/login" className="hover:text-ink-700 transition-colors">Login</Link>
             </div>
-            <p className="text-sm text-ink-400">
-              &copy; {new Date().getFullYear()} ThreadScope. All rights reserved.
-            </p>
           </div>
         </div>
+        <SiteFooter />
       </footer>
     </div>
   );
