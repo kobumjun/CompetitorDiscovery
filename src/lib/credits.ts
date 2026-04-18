@@ -87,12 +87,10 @@ export async function getUserProfile(userId: string): Promise<User> {
 
 export function getCreditsForPlan(plan: string): number {
   switch (plan) {
-    case "lite":
-      return PLAN_MONTHLY_CREDITS.lite;
-    case "standard":
-      return PLAN_MONTHLY_CREDITS.standard;
     case "pro":
       return PLAN_MONTHLY_CREDITS.pro;
+    case "agency":
+      return PLAN_MONTHLY_CREDITS.agency;
     default:
       return 0;
   }

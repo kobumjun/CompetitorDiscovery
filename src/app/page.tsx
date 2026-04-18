@@ -2,73 +2,25 @@
 
 import Link from "next/link";
 import {
-  Crosshair,
+  Rocket,
   ArrowRight,
-  Link2,
-  Cpu,
-  BarChart3,
+  Sparkles,
+  Clock,
   FileText,
-  Target,
-  Search,
-  Layers,
-  Lightbulb,
+  PenTool,
+  Eye,
+  Send,
   Check,
-  TrendingUp,
   Users,
   Zap,
+  BarChart3,
+  Shield,
+  RefreshCcw,
 } from "lucide-react";
 import { PLANS } from "@/types";
 import { PlanCheckoutButton } from "@/components/plan-checkout-button";
 import type { PaidPlan } from "@/lib/lemonsqueezy";
 import { SiteFooter } from "@/components/site-footer";
-
-const EXAMPLE_COMPETITORS = [
-  { name: "Mina Park", category: "Web Development", stage: "High intent" },
-  { name: "Joon Kim", category: "Design", stage: "High intent" },
-  { name: "Alex Lee", category: "Automation", stage: "Medium intent" },
-  { name: "Dana Choi", category: "Marketing", stage: "Medium intent" },
-  { name: "Chris Shin", category: "AI Tooling", stage: "Low intent" },
-  { name: "Nate Jung", category: "Operations", stage: "Medium intent" },
-  { name: "Ella Han", category: "Lead Gen", stage: "High intent" },
-  { name: "Tom Song", category: "Web Development", stage: "Low intent" },
-];
-
-const EXAMPLE_CATEGORIES = [
-  { name: "Web Development", pct: 31, color: "bg-brand-500" },
-  { name: "Automation", pct: 24, color: "bg-blue-500" },
-  { name: "Design", pct: 18, color: "bg-emerald-500" },
-  { name: "Marketing", pct: 16, color: "bg-violet-500" },
-  { name: "Operations", pct: 11, color: "bg-amber-500" },
-];
-
-const EXAMPLE_PATTERNS = [
-  "Asking for trusted freelancer",
-  "Need help this week",
-  "Seeking recommendation",
-  "Comparing vendor options",
-  "Pain point escalation",
-  "Budget-ready project",
-  "Looking for specialist",
-  "Open to DM follow-up",
-];
-
-const EXAMPLE_IDEAS = [
-  {
-    name: "Quick homepage audit",
-    desc: "Offer a fast conversion + UX review to high-intent leads",
-    audience: "Founders asking for web help",
-  },
-  {
-    name: "Automation teardown",
-    desc: "Show one workflow you can automate in 48 hours",
-    audience: "Ops-heavy solo teams",
-  },
-  {
-    name: "Design refresh proposal",
-    desc: "Send before/after direction for pages they complained about",
-    audience: "Startup teams with design pain",
-  },
-];
 
 export default function LandingPage() {
   return (
@@ -77,27 +29,17 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-surface-200">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <Crosshair className="w-6 h-6 text-brand-500" strokeWidth={2.5} />
-            <span className="text-lg font-bold text-ink-900">ThreadScope</span>
+            <Rocket className="w-6 h-6 text-brand-500" strokeWidth={2.5} />
+            <span className="text-lg font-bold text-ink-900">ProposalPilot</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm font-medium text-ink-500 hover:text-ink-900 transition-colors">
-              Features
-            </a>
-            <a href="#how-it-works" className="text-sm font-medium text-ink-500 hover:text-ink-900 transition-colors">
-              How It Works
-            </a>
-            <a href="#pricing" className="text-sm font-medium text-ink-500 hover:text-ink-900 transition-colors">
-              Pricing
-            </a>
+            <a href="#features" className="text-sm font-medium text-ink-500 hover:text-ink-900 transition-colors">Features</a>
+            <a href="#how-it-works" className="text-sm font-medium text-ink-500 hover:text-ink-900 transition-colors">How It Works</a>
+            <a href="#pricing" className="text-sm font-medium text-ink-500 hover:text-ink-900 transition-colors">Pricing</a>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/login" className="btn-ghost text-sm">
-              Log in
-            </Link>
-            <Link href="/signup" className="btn-primary text-sm">
-              Get Started
-            </Link>
+            <Link href="/login" className="btn-ghost text-sm">Log in</Link>
+            <Link href="/signup" className="btn-primary text-sm">Start Free</Link>
           </div>
         </div>
       </nav>
@@ -109,44 +51,37 @@ export default function LandingPage() {
         <div className="relative max-w-4xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-50 border border-brand-200 rounded-full text-xs font-semibold text-brand-700 mb-6">
             <Zap className="w-3.5 h-3.5" />
-            Buyer-intent extraction from public conversations
+            AI-powered proposal generation
           </div>
           <h1 className="text-display-xl font-black text-ink-900 mb-6 leading-tight">
-            Turn any X thread into{" "}
-            <span className="gradient-text">qualified leads</span>
+            Create winning proposals in{" "}
+            <span className="gradient-text">30 seconds</span>, not 3 hours
           </h1>
           <p className="text-lg md:text-xl text-ink-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Paste an X thread URL. Get outreach-ready prospects with intent score,
-            pain category, and messaging angle in seconds.
+            AI-powered proposal generator for freelancers, agencies, and consultants.
+            Describe your project, get a polished, ready-to-send proposal with pricing, timeline, and terms.
           </p>
-          <div className="max-w-xl mx-auto mb-4">
-            <div className="flex gap-2 p-2 bg-white border border-surface-200 rounded-xl shadow-elevated">
-              <div className="flex-1 flex items-center gap-3 px-4">
-                <Link2 className="w-5 h-5 text-ink-400 flex-shrink-0" />
-                <span className="text-sm text-ink-400 truncate">
-                  https://x.com/naval/status/1832456...
-                </span>
-              </div>
-              <Link href="/signup" className="btn-primary whitespace-nowrap">
-                Extract Leads
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+            <Link href="/signup" className="btn-primary text-base px-8 py-3">
+              Start Free — 5 Proposals
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+            <a href="#how-it-works" className="btn-secondary text-base px-6 py-3">
+              See How It Works
+            </a>
           </div>
-          <p className="text-sm text-ink-400">
-            3 free analyses on signup. No credit card required.
-          </p>
+          <p className="text-sm text-ink-400">No credit card required</p>
         </div>
       </section>
 
-      {/* Stats Bar */}
+      {/* Stats */}
       <section className="py-10 border-y border-surface-200 bg-surface-50">
         <div className="max-w-4xl mx-auto px-6">
           <div className="grid grid-cols-3 gap-8">
             {[
-              { icon: Target, value: "200+", label: "Threads analyzed" },
-              { icon: Users, value: "4,800+", label: "Leads extracted" },
-              { icon: BarChart3, value: "1,600+", label: "High-intent leads flagged" },
+              { icon: FileText, value: "30s", label: "Average generation time" },
+              { icon: Users, value: "5 free", label: "Proposals to start" },
+              { icon: BarChart3, value: "100%", label: "Customizable output" },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <div className="flex items-center justify-center gap-2 mb-1">
@@ -166,28 +101,28 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <p className="section-title mb-3">How It Works</p>
             <h2 className="text-display font-bold text-ink-900">
-              From thread to outreach-ready list in 3 steps
+              From project brief to proposal in 3 steps
             </h2>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
                 step: "01",
-                icon: Link2,
-                title: "Paste a Thread URL",
-                desc: "Drop any public X thread where people discuss problems, ask for recommendations, or seek help.",
+                icon: PenTool,
+                title: "Describe Your Project",
+                desc: "Enter the client name, project description, budget, and timeline. Add as much or as little detail as you want.",
               },
               {
                 step: "02",
-                icon: Cpu,
-                title: "AI Analyzes the Conversation",
-                desc: "Our engine reads each reply and flags purchase intent, pain signals, and service-seeking behavior.",
+                icon: Sparkles,
+                title: "AI Generates Your Proposal",
+                desc: "GPT-4o crafts a professional proposal with cover letter, scope, deliverables, pricing table, terms, and next steps.",
               },
               {
                 step: "03",
-                icon: BarChart3,
-                title: "Get Structured Leads",
-                desc: "Receive ranked leads with intent type, problem category, outreach angles, and draft DM messages.",
+                icon: Send,
+                title: "Send & Track",
+                desc: "Share via link, track when clients view it, and collect electronic signatures — all in one place.",
               },
             ].map((item) => (
               <div key={item.step} className="relative">
@@ -214,107 +149,67 @@ export default function LandingPage() {
               Example Output
             </p>
             <h2 className="text-display font-bold text-white mb-3">
-              Here&apos;s what you get from a single thread
+              What AI generates for you
             </h2>
             <p className="text-ink-400 max-w-xl mx-auto">
-              Real structured leads from a public thread
-              with 150+ replies.
+              A real proposal structure generated from a simple project description
             </p>
           </div>
 
-          {/* Stat Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            {[
-              { value: "42", label: "Qualified Leads", color: "text-brand-400" },
-              { value: "16", label: "High-Intent Leads", color: "text-blue-400" },
-              { value: "6", label: "Intent Types", color: "text-emerald-400" },
-              { value: "8", label: "Outreach Angles", color: "text-violet-400" },
-            ].map((s) => (
-              <div key={s.label} className="bg-white/5 border border-white/10 rounded-xl p-5">
-                <div className={`text-3xl font-bold ${s.color} mb-1`}>{s.value}</div>
-                <div className="text-sm text-white/60">{s.label}</div>
-              </div>
-            ))}
-          </div>
-
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Leads Preview */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
-                <Target className="w-4 h-4 text-brand-400" />
-                Lead List
-              </h3>
+              <h3 className="text-sm font-semibold text-white/80 mb-4">📝 Cover Letter</h3>
+              <p className="text-sm text-white/60 leading-relaxed">
+                &ldquo;Dear Sarah, thank you for considering us for the Acme Corp website redesign.
+                With 8 years of experience in modern web design, we are excited to transform
+                your digital presence into a conversion-focused experience...&rdquo;
+              </p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <h3 className="text-sm font-semibold text-white/80 mb-4">📋 Scope & Deliverables</h3>
+              <div className="space-y-2">
+                {["Discovery & Research", "UI/UX Design", "Development & QA", "Launch & Handoff"].map((s) => (
+                  <div key={s} className="flex items-center gap-2 text-sm text-white/60">
+                    <Check className="w-4 h-4 text-brand-400" /> {s}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <h3 className="text-sm font-semibold text-white/80 mb-4">💰 Pricing Table</h3>
+              <div className="space-y-2">
+                {[
+                  { item: "Discovery & Research", amount: "$1,200" },
+                  { item: "UI/UX Design", amount: "$2,800" },
+                  { item: "Development", amount: "$3,500" },
+                  { item: "QA & Launch", amount: "$1,500" },
+                ].map((p) => (
+                  <div key={p.item} className="flex justify-between text-sm">
+                    <span className="text-white/60">{p.item}</span>
+                    <span className="text-white/80 font-medium">{p.amount}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between text-sm pt-2 border-t border-white/10">
+                  <span className="text-white font-bold">Total</span>
+                  <span className="text-brand-400 font-bold">$9,000</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <h3 className="text-sm font-semibold text-white/80 mb-4">📅 Timeline & Terms</h3>
               <div className="space-y-3">
-                {EXAMPLE_COMPETITORS.slice(0, 5).map((c) => (
-                  <div key={c.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-xs font-bold text-white/60">
-                        {c.name[0]}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-white">{c.name}</div>
-                        <div className="text-xs text-white/40">{c.category}</div>
-                      </div>
-                    </div>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/60">
-                      {c.stage}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Problem Categories Preview */}
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-blue-400" />
-                Problem Categories
-              </h3>
-              <div className="space-y-4">
-                {EXAMPLE_CATEGORIES.map((cat) => (
-                  <div key={cat.name}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-sm text-white/80">{cat.name}</span>
-                      <span className="text-xs text-white/40">{cat.pct}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${cat.color}`}
-                        style={{ width: `${cat.pct}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Intent Patterns */}
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-emerald-400" />
-                Intent Signals
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {EXAMPLE_PATTERNS.map((p) => (
-                  <span key={p} className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/70 border border-white/5">
-                    {p}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Outreach Ideas */}
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
-                <Lightbulb className="w-4 h-4 text-violet-400" />
-                Outreach Angles
-              </h3>
-              <div className="space-y-4">
-                {EXAMPLE_IDEAS.map((idea) => (
-                  <div key={idea.name} className="border-l-2 border-violet-500/40 pl-3">
-                    <div className="text-sm font-medium text-white">{idea.name}</div>
-                    <div className="text-xs text-white/50 mt-0.5">{idea.desc}</div>
-                    <div className="text-xs text-violet-400/70 mt-1">→ {idea.audience}</div>
+                {[
+                  { phase: "Week 1-2", desc: "Discovery & Wireframes" },
+                  { phase: "Week 3-4", desc: "Visual Design" },
+                  { phase: "Week 5-7", desc: "Development" },
+                  { phase: "Week 8", desc: "QA & Launch" },
+                ].map((t) => (
+                  <div key={t.phase} className="flex gap-3 text-sm">
+                    <span className="text-brand-400 font-bold min-w-[70px]">{t.phase}</span>
+                    <span className="text-white/60">{t.desc}</span>
                   </div>
                 ))}
               </div>
@@ -327,43 +222,19 @@ export default function LandingPage() {
       <section id="features" className="py-20 md:py-28">
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-16">
-            <p className="section-title mb-3">Capabilities</p>
+            <p className="section-title mb-3">Features</p>
             <h2 className="text-display font-bold text-ink-900">
-              Everything you need to find likely buyers
+              Everything you need to win more clients
             </h2>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              {
-                icon: FileText,
-                title: "Lead Summary",
-                desc: "Instant summary of total leads and intent distribution from one public thread.",
-              },
-              {
-                icon: Target,
-                title: "Qualified Lead List",
-                desc: "Extract people with strong service-seeking signals and rank them for fast outreach.",
-              },
-              {
-                icon: BarChart3,
-                title: "Intent Classification",
-                desc: "Classify each lead by intent type: recommendation ask, active evaluation, pain point, and more.",
-              },
-              {
-                icon: Search,
-                title: "Problem Detection",
-                desc: "Understand what each lead is struggling with so your message is directly relevant.",
-              },
-              {
-                icon: Layers,
-                title: "Outreach Angle Suggestions",
-                desc: "Get concise outreach directions for each lead based on context and intent strength.",
-              },
-              {
-                icon: Lightbulb,
-                title: "Draft DM Messages",
-                desc: "Generate short, usable DM-style drafts so you can move from signal to action quickly.",
-              },
+              { icon: Sparkles, title: "AI Generation", desc: "GPT-4o creates professional proposals from your project description in under 30 seconds." },
+              { icon: PenTool, title: "Fully Editable", desc: "Every section is editable. Click to modify cover letter, pricing, terms — make it yours." },
+              { icon: Eye, title: "View Tracking", desc: "Know exactly when your client opens and views the proposal. Never wonder again." },
+              { icon: FileText, title: "E-Signatures", desc: "Clients can accept and sign proposals directly from the shared link. No extra tools needed." },
+              { icon: Users, title: "Client Management", desc: "Save client details and reuse them across proposals. Build your client database." },
+              { icon: Clock, title: "PDF & Print", desc: "Export proposals as PDF or print them. Professional formatting included." },
             ].map((feature) => (
               <div key={feature.title} className="card p-6 group hover:shadow-card-hover transition-all">
                 <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center mb-4 group-hover:bg-brand-100 transition-colors">
@@ -386,16 +257,43 @@ export default function LandingPage() {
               Simple, transparent pricing
             </h2>
             <p className="text-ink-500">
-              Start with 3 free analyses. Upgrade when you need more.
+              Start with 5 free proposals. Upgrade when you need more.
             </p>
           </div>
+
           <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            {/* Free Plan */}
+            <div className="card p-6 flex flex-col">
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-ink-900">Free</h3>
+                <div className="mt-3">
+                  <span className="text-3xl font-black text-ink-900">$0</span>
+                  <span className="text-sm text-ink-400">/mo</span>
+                </div>
+                <div className="mt-1 text-sm text-ink-500">5 proposals included</div>
+              </div>
+              <ul className="space-y-3 mb-8 flex-1">
+                {[
+                  "5 AI-generated proposals",
+                  "All proposal sections",
+                  "Shareable links",
+                  "Basic view tracking",
+                ].map((f) => (
+                  <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
+                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />{f}
+                  </li>
+                ))}
+              </ul>
+              <Link href="/signup" className="btn-secondary w-full text-center">
+                Get Started Free
+              </Link>
+            </div>
+
+            {/* Paid Plans */}
             {PLANS.map((plan) => (
               <div
                 key={plan.type}
-                className={`card p-6 flex flex-col relative ${
-                  plan.popular ? "border-brand-500 border-2 shadow-elevated" : ""
-                }`}
+                className={`card p-6 flex flex-col relative ${plan.popular ? "border-brand-500 border-2 shadow-elevated" : ""}`}
               >
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-brand-500 text-white text-xs font-bold rounded-full">
@@ -409,21 +307,17 @@ export default function LandingPage() {
                     <span className="text-sm text-ink-400">/mo</span>
                   </div>
                   <div className="mt-1 text-sm text-ink-500">
-                    {plan.credits} analyses · {plan.pricePerCredit}/each
+                    {plan.credits} proposals · {plan.pricePerCredit}/each
                   </div>
                 </div>
                 <ul className="space-y-3 mb-8 flex-1">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2.5 text-sm text-ink-700">
-                      <Check className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />
-                      {feature}
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
+                      <Check className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />{f}
                     </li>
                   ))}
                 </ul>
-                <PlanCheckoutButton
-                  plan={plan.type as PaidPlan}
-                  popular={plan.popular}
-                />
+                <PlanCheckoutButton plan={plan.type as PaidPlan} popular={plan.popular} />
               </div>
             ))}
           </div>
@@ -434,17 +328,17 @@ export default function LandingPage() {
       <section className="py-20 md:py-28">
         <div className="max-w-3xl mx-auto px-6 text-center">
           <div className="w-16 h-16 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto mb-6">
-            <Crosshair className="w-8 h-8 text-brand-500" />
+            <Rocket className="w-8 h-8 text-brand-500" />
           </div>
           <h2 className="text-display font-bold text-ink-900 mb-4">
-            Ready to decode your market?
+            Win more clients with less effort
           </h2>
           <p className="text-lg text-ink-500 mb-8 max-w-lg mx-auto">
-            Stop reading 100+ comments manually. Start extracting the people most
-            likely to buy your service.
+            Stop spending hours on proposals. Let AI do the heavy lifting so you
+            can focus on what you do best.
           </p>
           <Link href="/signup" className="btn-primary text-base px-8 py-3">
-            Start Free — 3 Analyses Included
+            Start Free — 5 Proposals Included
             <ArrowRight className="w-5 h-5" />
           </Link>
           <p className="text-xs text-ink-400 mt-4">No credit card required</p>
@@ -456,8 +350,8 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-6 py-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <Crosshair className="w-5 h-5 text-brand-500" />
-              <span className="font-bold text-ink-900">ThreadScope</span>
+              <Rocket className="w-5 h-5 text-brand-500" />
+              <span className="font-bold text-ink-900">ProposalPilot</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-ink-400">
               <a href="#features" className="hover:text-ink-700 transition-colors">Features</a>

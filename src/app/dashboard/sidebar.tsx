@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
-  Crosshair,
+  Rocket,
   LayoutDashboard,
-  Clock,
+  FileText,
+  Users,
   Settings,
   LogOut,
   CreditCard,
@@ -19,7 +20,8 @@ import { SiteFooter } from "@/components/site-footer";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
-  { href: "/dashboard/history", icon: Clock, label: "History", exact: false },
+  { href: "/dashboard/proposals", icon: FileText, label: "Proposals", exact: false },
+  { href: "/dashboard/clients", icon: Users, label: "Clients", exact: false },
   { href: "/dashboard/settings", icon: Settings, label: "Settings", exact: false },
 ];
 
@@ -44,15 +46,13 @@ export function DashboardSidebar({ user }: { user: User }) {
 
   return (
     <aside className="w-64 h-screen bg-white border-r border-surface-200 flex flex-col flex-shrink-0">
-      {/* Logo */}
       <div className="h-16 flex items-center gap-2 px-5 border-b border-surface-200">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <Crosshair className="w-6 h-6 text-brand-500" strokeWidth={2.5} />
-          <span className="text-lg font-bold text-ink-900">ThreadScope</span>
+          <Rocket className="w-6 h-6 text-brand-500" strokeWidth={2.5} />
+          <span className="text-lg font-bold text-ink-900">ProposalPilot</span>
         </Link>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 py-4 px-3 space-y-1">
         {NAV_ITEMS.map((item) => {
           const active = isActive(item.href, item.exact);
@@ -74,9 +74,7 @@ export function DashboardSidebar({ user }: { user: User }) {
         })}
       </nav>
 
-      {/* Bottom Section */}
       <div className="p-4 space-y-3 border-t border-surface-200">
-        {/* Credits */}
         <div className="bg-surface-50 rounded-lg p-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-ink-500 flex items-center gap-1.5">
@@ -92,19 +90,14 @@ export function DashboardSidebar({ user }: { user: User }) {
             <div
               className={cn(
                 "h-full rounded-full transition-all",
-                creditPercentage > 50
-                  ? "bg-brand-500"
-                  : creditPercentage > 20
-                  ? "bg-amber-500"
-                  : "bg-red-500"
+                creditPercentage > 50 ? "bg-brand-500" : creditPercentage > 20 ? "bg-amber-500" : "bg-red-500"
               )}
               style={{ width: `${creditPercentage}%` }}
             />
           </div>
         </div>
 
-        {/* Upgrade */}
-        {(user.plan === "free" || user.plan === "lite") && (
+        {user.plan === "free" && (
           <Link
             href="/pricing"
             className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-brand-700 bg-brand-50 rounded-lg hover:bg-brand-100 transition-colors"
@@ -114,7 +107,6 @@ export function DashboardSidebar({ user }: { user: User }) {
           </Link>
         )}
 
-        {/* User & Sign Out */}
         <div className="flex items-center justify-between">
           <span className="text-xs text-ink-400 truncate max-w-[160px]" title={user.email}>
             {user.email}

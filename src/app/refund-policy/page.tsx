@@ -15,7 +15,7 @@ export default function RefundPolicyPage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-ink-900">General rule</h2>
             <p>
-              ThreadScope delivers digital access and AI-generated analysis.{" "}
+              ProposalPilot delivers digital access and AI-generated proposals.{" "}
               <strong>All sales are final</strong> except in the limited cases below.
               Dissatisfaction with the subjective quality of an AI report is{" "}
               <strong>not</strong> grounds for a refund.
@@ -26,8 +26,8 @@ export default function RefundPolicyPage() {
             <ul className="list-disc pl-5 space-y-2">
               <li>
                 <strong>Service not delivered:</strong> You were charged but no analysis
-                result was produced due to a clear failure on our side (e.g. persistent
-                errors, no completed run after payment where applicable).
+                proposal was generated due to a clear failure on our side (e.g. persistent
+                errors, no completed generation after credit deduction).
               </li>
               <li>
                 <strong>Duplicate charge:</strong> You were billed twice for the same
@@ -42,9 +42,9 @@ export default function RefundPolicyPage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-ink-900">What we do not refund</h2>
             <p>
-              We do not refund because you dislike the wording of a report, disagree with
-              AI conclusions, or expected different competitors or insights. Credits used
-              for successful analyses are consumed as designed.
+              We do not refund because you dislike the wording of a proposal, disagree with
+              AI-generated content, or expected different output. Credits used
+              for successful proposal generations are consumed as designed.
             </p>
           </section>
           <section className="space-y-2">
@@ -52,7 +52,7 @@ export default function RefundPolicyPage() {
             <p>
               Email{" "}
               <a
-                href={`mailto:${REFUND_EMAIL}?subject=ThreadScope%20refund%20request`}
+                href={`mailto:${REFUND_EMAIL}?subject=ProposalPilot%20refund%20request`}
                 className="text-brand-600 hover:text-brand-700 font-medium break-all"
               >
                 {REFUND_EMAIL}

@@ -1,12 +1,10 @@
-export type PaidPlan = "lite" | "standard" | "pro";
+export type PaidPlan = "pro" | "agency";
 
 export function getVariantIdForPlan(plan: PaidPlan): string | undefined {
   const id =
-    plan === "lite"
-      ? process.env.LEMONSQUEEZY_LITE_VARIANT_ID
-      : plan === "standard"
-        ? process.env.LEMONSQUEEZY_STANDARD_VARIANT_ID
-        : process.env.LEMONSQUEEZY_PRO_VARIANT_ID;
+    plan === "pro"
+      ? process.env.LEMONSQUEEZY_PRO_VARIANT_ID
+      : process.env.LEMONSQUEEZY_AGENCY_VARIANT_ID;
   const trimmed = id?.trim();
   return trimmed || undefined;
 }

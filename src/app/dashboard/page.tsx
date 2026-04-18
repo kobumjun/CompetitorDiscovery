@@ -1,226 +1,130 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
+  FileText,
+  Send,
+  CheckCircle2,
+  TrendingUp,
+  Plus,
   ArrowRight,
-  Link2,
-  Loader2,
-  AlertCircle,
-  Target,
   Clock,
   Sparkles,
-  ArrowUpRight,
-  Package,
-  Settings,
 } from "lucide-react";
-import { formatRelativeTime, getStatusColor, extractPostId } from "@/lib/utils";
-import type { Analysis, User } from "@/types";
-import { SENSITIVITY_LABELS } from "@/types";
+import { cn, formatRelativeTime } from "@/lib/utils";
+import type { Proposal } from "@/types";
+import { formatCurrency } from "@/types";
+
+const STATUS_COLOR: Record<string, string> = {
+  draft: "bg-surface-100 text-ink-600",
+  sent: "bg-blue-50 text-blue-700",
+  viewed: "bg-amber-50 text-amber-700",
+  accepted: "bg-emerald-50 text-emerald-700",
+  rejected: "bg-red-50 text-red-700",
+  expired: "bg-surface-100 text-ink-400",
+};
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [analyses, setAnalyses] = useState<Analysis[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
-  const [loadingData, setLoadingData] = useState(true);
-  const [userProfile, setUserProfile] = useState<User | null>(null);
+  const [hasProfile, setHasProfile] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       const supabase = createClient();
-
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const [analysesRes, profileRes] = await Promise.all([
+      const [proposalsRes, profileRes, creditsRes] = await Promise.all([
         supabase
-          .from("analyses")
-          .select("*")
+          .from("proposals")
+          .select("*, client:clients(*)")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(5),
-        supabase.from("users").select("*").eq("id", user.id).single(),
+        supabase
+          .from("business_profiles")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase.from("users").select("credits").eq("id", user.id).single(),
       ]);
 
-      if (analysesRes.data) setAnalyses(analysesRes.data as Analysis[]);
-      if (profileRes.data) {
-        const p = profileRes.data as User;
-        setCredits(p.credits);
-        setUserProfile(p);
-      }
-      setLoadingData(false);
+      if (proposalsRes.data) setProposals(proposalsRes.data as Proposal[]);
+      if (!profileRes.data) setHasProfile(false);
+      if (creditsRes.data) setCredits(creditsRes.data.credits);
+      setLoading(false);
     }
-
     fetchData();
   }, []);
 
-  const hasOffer = userProfile?.product_name?.trim();
-
-  async function handleAnalyze(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-
-    const postId = extractPostId(url);
-    if (!postId) {
-      setError("Please enter a valid X/Twitter post URL");
-      return;
-    }
-
-    if (credits !== null && credits < 1) {
-      setError("No credits remaining. Upgrade your plan to continue.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Analysis failed. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      router.push(`/dashboard/analysis/${data.id}`);
-    } catch {
-      setError("Network error. Please try again.");
-      setLoading(false);
-    }
-  }
+  const total = proposals.length;
+  const sent = proposals.filter((p) => p.status === "sent" || p.status === "viewed").length;
+  const accepted = proposals.filter((p) => p.status === "accepted").length;
+  const winRate = total > 0 ? Math.round((accepted / total) * 100) : 0;
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
-      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-display font-bold text-ink-900">Lead Extraction</h1>
-        <p className="text-ink-500 mt-1">
-          Analyze public X threads and extract outreach-ready prospects
-        </p>
+        <h1 className="text-display font-bold text-ink-900">Dashboard</h1>
+        <p className="text-ink-500 mt-1">Your proposal command center</p>
       </div>
 
-      {/* My Offer Context */}
-      {!loadingData && (
-        <div className="card p-4 mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <Package className="w-5 h-5 text-brand-500 flex-shrink-0" />
-            {hasOffer ? (
-              <span className="text-sm text-ink-700 truncate">
-                Leads will be scored for{" "}
-                <strong className="text-ink-900">{userProfile!.product_name}</strong>
-                {userProfile!.offer_categories?.length
-                  ? ` (${userProfile!.offer_categories.slice(0, 2).join(", ")}${userProfile!.offer_categories.length > 2 ? "…" : ""})`
-                  : ""}
-                {" · "}
-                <span className="text-ink-500">
-                  {SENSITIVITY_LABELS[userProfile!.lead_sensitivity] || "Balanced"} mode
-                </span>
-              </span>
-            ) : (
-              <span className="text-sm text-ink-500">
-                Set up your offer profile so leads are scored and pitches are
-                tailored to your product.
-              </span>
-            )}
-          </div>
-          <Link
-            href="/dashboard/settings"
-            className="btn-ghost text-xs flex-shrink-0"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            {hasOffer ? "Edit" : "Set Up"}
-          </Link>
-        </div>
-      )}
-
-      {/* URL Input */}
-      <form onSubmit={handleAnalyze} className="card p-6 mb-6">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 relative">
-            <Link2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-ink-400" />
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="input-field pl-12 h-12 text-base"
-              placeholder="Paste an X thread URL — e.g., https://x.com/user/status/123456"
-              disabled={loading}
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loading || (credits !== null && credits < 1)}
-            className="btn-primary h-12 px-6 text-base whitespace-nowrap"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                Extract Leads
-                <ArrowRight className="w-5 h-5" />
-              </>
-            )}
-          </button>
-        </div>
-
-        {error && (
-          <div className="flex items-center gap-2 mt-3 text-sm text-red-600">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            {error}
-          </div>
-        )}
-
-        <p className="text-xs text-ink-400 mt-3">
-          Supports public X/Twitter threads with replies. One thread analysis
-          costs 1 credit.
-        </p>
-      </form>
-
-      {/* Credits Banner */}
-      {credits !== null && (
-        <div
-          className={`card p-4 mb-8 flex items-center justify-between ${
-            credits === 0 ? "border-red-200 bg-red-50" : ""
-          }`}
+      {!loading && !hasProfile && (
+        <Link
+          href="/dashboard/settings"
+          className="card p-4 mb-6 flex items-center justify-between border-brand-200 bg-brand-50 hover:bg-brand-100 transition-colors block"
         >
           <div className="flex items-center gap-3">
-            <Sparkles
-              className={`w-5 h-5 ${credits === 0 ? "text-red-500" : "text-brand-500"}`}
-            />
+            <Sparkles className="w-5 h-5 text-brand-600" />
+            <span className="text-sm text-brand-800 font-medium">
+              Set up your business profile for personalized proposals
+            </span>
+          </div>
+          <ArrowRight className="w-4 h-4 text-brand-600" />
+        </Link>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+        <StatCard icon={FileText} label="Total Proposals" value={total} />
+        <StatCard icon={Send} label="Sent" value={sent} />
+        <StatCard icon={CheckCircle2} label="Accepted" value={accepted} color="text-emerald-600" />
+        <StatCard icon={TrendingUp} label="Win Rate" value={`${winRate}%`} />
+      </div>
+
+      <Link
+        href="/dashboard/proposals/new"
+        className="btn-primary w-full h-14 text-base mb-8 justify-center"
+      >
+        <Plus className="w-5 h-5" />
+        Create New Proposal
+      </Link>
+
+      {credits !== null && (
+        <div
+          className={cn(
+            "card p-4 mb-8 flex items-center justify-between",
+            credits === 0 ? "border-red-200 bg-red-50" : ""
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <Sparkles className={cn("w-5 h-5", credits === 0 ? "text-red-500" : "text-brand-500")} />
             <span className="text-sm text-ink-700">
               {credits === 0 ? (
                 <>
                   No credits remaining.{" "}
-                  <Link
-                    href="/pricing"
-                    className="text-brand-600 font-semibold hover:underline"
-                  >
+                  <Link href="/pricing" className="text-brand-600 font-semibold hover:underline">
                     Upgrade your plan
-                  </Link>{" "}
-                  to continue.
+                  </Link>
                 </>
               ) : (
                 <>
-                  You have{" "}
-                  <strong className="text-ink-900">{credits}</strong> credit
-                  {credits !== 1 ? "s" : ""} remaining
+                  <strong className="text-ink-900">{credits}</strong> proposal credit{credits !== 1 ? "s" : ""} remaining
                 </>
               )}
             </span>
@@ -228,22 +132,17 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Recent Analyses */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-ink-900">Recent Analyses</h2>
-          {analyses.length > 0 && (
-            <Link
-              href="/dashboard/history"
-              className="text-sm text-brand-600 font-medium hover:text-brand-700 flex items-center gap-1"
-            >
-              View all
-              <ArrowUpRight className="w-3.5 h-3.5" />
+          <h2 className="text-lg font-bold text-ink-900">Recent Proposals</h2>
+          {proposals.length > 0 && (
+            <Link href="/dashboard/proposals" className="text-sm text-brand-600 font-medium hover:text-brand-700 flex items-center gap-1">
+              View all <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           )}
         </div>
 
-        {loadingData ? (
+        {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="card p-4 animate-pulse">
@@ -252,50 +151,36 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
-        ) : analyses.length === 0 ? (
+        ) : proposals.length === 0 ? (
           <div className="card p-12 text-center">
-            <Target className="w-10 h-10 text-ink-300 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-ink-700 mb-1">
-              No lead runs yet
-            </h3>
-            <p className="text-sm text-ink-400">
-              Paste a public thread URL above to start extracting leads
-            </p>
+            <FileText className="w-10 h-10 text-ink-300 mx-auto mb-3" />
+            <h3 className="text-base font-semibold text-ink-700 mb-1">No proposals yet</h3>
+            <p className="text-sm text-ink-400">Create your first AI-generated proposal</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {analyses.map((analysis) => (
+            {proposals.map((p) => (
               <Link
-                key={analysis.id}
-                href={`/dashboard/analysis/${analysis.id}`}
+                key={p.id}
+                href={`/dashboard/proposals/${p.id}`}
                 className="card-hover p-4 flex items-center justify-between group block"
               >
-                <div className="flex items-center gap-4 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-lg bg-surface-100 flex items-center justify-center flex-shrink-0">
-                    <Target className="w-4 h-4 text-ink-500" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-ink-800 truncate max-w-md">
-                      {analysis.post_url}
-                    </div>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span
-                        className={`badge text-xs ${getStatusColor(analysis.status)}`}
-                      >
-                        {analysis.status}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-ink-800 truncate">{p.title}</div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className={cn("badge text-xs", STATUS_COLOR[p.status])}>{p.status}</span>
+                    {p.client && (
+                      <span className="text-xs text-ink-400">{(p.client as any).company_name}</span>
+                    )}
+                    {p.total_amount && (
+                      <span className="text-xs text-ink-500 font-medium">
+                        {formatCurrency(p.total_amount, p.currency)}
                       </span>
-                      <span className="text-xs text-ink-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatRelativeTime(analysis.created_at)}
-                      </span>
-                      {analysis.status === "completed" && analysis.results && (
-                        <span className="text-xs text-ink-500">
-                          {(analysis.results as any).leadSummary?.totalLeads ||
-                            0}{" "}
-                          leads
-                        </span>
-                      )}
-                    </div>
+                    )}
+                    <span className="text-xs text-ink-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {formatRelativeTime(p.created_at)}
+                    </span>
                   </div>
                 </div>
                 <ArrowRight className="w-4 h-4 text-ink-300 group-hover:text-brand-500 transition-colors flex-shrink-0" />
@@ -304,6 +189,28 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  color,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  color?: string;
+}) {
+  return (
+    <div className="stat-card">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon className="w-4 h-4 text-ink-400" />
+        <span className="stat-label">{label}</span>
+      </div>
+      <span className={cn("stat-value", color)}>{value}</span>
     </div>
   );
 }

@@ -138,3 +138,14 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-ink-400;
 }
+
+@media print {
+  .no-print { display: none !important; }
+
+  body { background: white !important; }
+
+  .card, .card-hover {
+    box-shadow: none !important;
+    border-color: #e2e8f0 !important;
+  }
+}

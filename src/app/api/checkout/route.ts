@@ -6,7 +6,7 @@ import {
   type PaidPlan,
 } from "@/lib/lemonsqueezy";
 
-const PAID_PLANS: PaidPlan[] = ["lite", "standard", "pro"];
+const PAID_PLANS: PaidPlan[] = ["pro", "agency"];
 
 function isPaidPlan(p: string): p is PaidPlan {
   return PAID_PLANS.includes(p as PaidPlan);
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     if (!plan || typeof plan !== "string" || !isPaidPlan(plan)) {
       return NextResponse.json(
-        { error: "Invalid plan. Use lite, standard, or pro." },
+        { error: "Invalid plan. Use pro or agency." },
         { status: 400 }
       );
     }

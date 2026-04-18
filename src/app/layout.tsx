@@ -2,22 +2,22 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ThreadScope — Lead Extraction from X Threads",
+  title: "ProposalPilot — AI Proposal Generator",
   description:
-    "Turn any public X thread into outreach-ready leads. Detect buyer intent, prioritize prospects, and send better outreach faster.",
+    "Create winning proposals in 30 seconds, not 3 hours. AI-powered proposal generator for freelancers, agencies, and consultants.",
   keywords: [
-    "lead extraction",
-    "buyer intent",
-    "X threads",
-    "Twitter threads",
-    "outreach",
-    "prospecting",
-    "sales intelligence",
+    "proposal generator",
+    "AI proposals",
+    "freelancer tools",
+    "agency proposals",
+    "consulting proposals",
+    "electronic signatures",
+    "client management",
   ],
   openGraph: {
-    title: "ThreadScope — Lead Extraction from X Threads",
+    title: "ProposalPilot — AI Proposal Generator",
     description:
-      "Turn any public X thread into outreach-ready leads.",
+      "Create winning proposals in 30 seconds. AI-powered for freelancers and agencies.",
     type: "website",
   },
 };

@@ -202,8 +202,7 @@ export async function POST(request: NextRequest) {
 
 function determinePlan(variantId: number | string | undefined): string {
   const vid = String(variantId);
-  if (vid === process.env.LEMONSQUEEZY_LITE_VARIANT_ID) return "lite";
-  if (vid === process.env.LEMONSQUEEZY_STANDARD_VARIANT_ID) return "standard";
   if (vid === process.env.LEMONSQUEEZY_PRO_VARIANT_ID) return "pro";
-  return "lite";
+  if (vid === process.env.LEMONSQUEEZY_AGENCY_VARIANT_ID) return "agency";
+  return "pro";
 }
