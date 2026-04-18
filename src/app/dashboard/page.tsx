@@ -108,27 +108,53 @@ export default function DashboardPage() {
       {credits !== null && (
         <div
           className={cn(
-            "card p-4 mb-8 flex items-center justify-between",
-            credits === 0 ? "border-red-200 bg-red-50" : ""
+            "card p-4 mb-8",
+            credits === 0
+              ? "border-red-200 bg-red-50"
+              : credits <= 3
+                ? "border-amber-200 bg-amber-50"
+                : ""
           )}
         >
-          <div className="flex items-center gap-3">
-            <Sparkles className={cn("w-5 h-5", credits === 0 ? "text-red-500" : "text-brand-500")} />
-            <span className="text-sm text-ink-700">
-              {credits === 0 ? (
-                <>
-                  No credits remaining.{" "}
-                  <Link href="/pricing" className="text-brand-600 font-semibold hover:underline">
-                    Upgrade your plan
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <strong className="text-ink-900">{credits}</strong> proposal credit{credits !== 1 ? "s" : ""} remaining
-                </>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <Sparkles
+                className={cn(
+                  "w-5 h-5 flex-shrink-0",
+                  credits === 0 ? "text-red-500" : credits <= 3 ? "text-amber-500" : "text-brand-500"
+                )}
+              />
+              <span className="text-sm text-ink-700">
+                {credits === 0 ? (
+                  <span className="text-red-700 font-medium">No credits remaining</span>
+                ) : (
+                  <>
+                    <strong className={cn("text-ink-900", credits <= 3 && "text-amber-800")}>
+                      {credits}
+                    </strong>{" "}
+                    proposal credit{credits !== 1 ? "s" : ""} remaining
+                  </>
+                )}
+              </span>
+            </div>
+            <Link
+              href="/pricing"
+              className={cn(
+                "flex-shrink-0 ml-4 text-sm font-semibold rounded-lg px-4 py-2 transition-colors flex items-center gap-1.5",
+                credits <= 3
+                  ? "bg-brand-500 text-white hover:bg-brand-600"
+                  : "text-brand-600 hover:text-brand-700 hover:bg-brand-50"
               )}
-            </span>
+            >
+              Upgrade Plan
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
+          {credits > 0 && credits <= 3 && (
+            <p className="text-xs text-amber-700 mt-2 ml-8">
+              Running low on credits! Upgrade for more proposals at a better per-credit price.
+            </p>
+          )}
         </div>
       )}
 

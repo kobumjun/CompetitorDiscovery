@@ -75,13 +75,25 @@ export function DashboardSidebar({ user }: { user: User }) {
       </nav>
 
       <div className="p-4 space-y-3 border-t border-surface-200">
-        <div className="bg-surface-50 rounded-lg p-3">
+        <div className={cn(
+          "rounded-lg p-3",
+          user.credits <= 3 && user.credits > 0 ? "bg-amber-50" : user.credits === 0 ? "bg-red-50" : "bg-surface-50"
+        )}>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-ink-500 flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-brand-500" />
+            <span className={cn(
+              "text-xs font-semibold flex items-center gap-1.5",
+              user.credits === 0 ? "text-red-600" : user.credits <= 3 ? "text-amber-600" : "text-ink-500"
+            )}>
+              <Zap className={cn(
+                "w-3.5 h-3.5",
+                user.credits === 0 ? "text-red-500" : user.credits <= 3 ? "text-amber-500" : "text-brand-500"
+              )} />
               Credits
             </span>
-            <span className="text-xs font-bold text-ink-900">
+            <span className={cn(
+              "text-xs font-bold",
+              user.credits === 0 ? "text-red-700" : user.credits <= 3 ? "text-amber-700" : "text-ink-900"
+            )}>
               {user.credits}
               <span className="text-ink-400 font-normal">/{maxCredits}</span>
             </span>
@@ -95,17 +107,28 @@ export function DashboardSidebar({ user }: { user: User }) {
               style={{ width: `${creditPercentage}%` }}
             />
           </div>
+          {user.credits <= 3 && (
+            <p className={cn(
+              "text-[10px] mt-1.5",
+              user.credits === 0 ? "text-red-600" : "text-amber-600"
+            )}>
+              {user.credits === 0 ? "No credits left!" : "Running low on credits!"}
+            </p>
+          )}
         </div>
 
-        {user.plan === "free" && (
-          <Link
-            href="/pricing"
-            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-brand-700 bg-brand-50 rounded-lg hover:bg-brand-100 transition-colors"
-          >
-            <CreditCard className="w-3.5 h-3.5" />
-            Upgrade Plan
-          </Link>
-        )}
+        <Link
+          href="/pricing"
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-colors",
+            user.credits <= 3
+              ? "text-white bg-brand-500 hover:bg-brand-600"
+              : "text-brand-700 bg-brand-50 hover:bg-brand-100"
+          )}
+        >
+          <CreditCard className="w-3.5 h-3.5" />
+          Upgrade Plan
+        </Link>
 
         <div className="flex items-center justify-between">
           <span className="text-xs text-ink-400 truncate max-w-[160px]" title={user.email}>
