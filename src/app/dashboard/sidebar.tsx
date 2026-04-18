@@ -45,7 +45,7 @@ export function DashboardSidebar({ user }: { user: User }) {
   const creditPercentage = Math.min((user.credits / maxCredits) * 100, 100);
 
   return (
-    <aside className="w-64 h-screen bg-white border-r border-surface-200 flex flex-col flex-shrink-0">
+    <aside className="dashboard-sidebar">
       <div className="h-16 flex items-center gap-2 px-5 border-b border-surface-200">
         <Link href="/dashboard" className="flex items-center gap-2">
           <Rocket className="w-6 h-6 text-brand-500" strokeWidth={2.5} />

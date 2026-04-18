@@ -96,6 +96,22 @@
   .gradient-text {
     @apply bg-gradient-to-r from-brand-500 to-brand-700 bg-clip-text text-transparent;
   }
+
+  /**
+   * Dashboard shell — desktop: sidebar + scrollable main.
+   * Below md: sidebar hidden; main is full width with bottom padding for mobile nav.
+   */
+  .dashboard-layout {
+    @apply flex min-h-0 h-[100dvh] w-full min-w-0 flex-col bg-surface-50 md:h-screen md:flex-row;
+  }
+
+  .dashboard-sidebar {
+    @apply hidden h-screen w-64 flex-shrink-0 flex-col border-r border-surface-200 bg-white md:flex;
+  }
+
+  .dashboard-main {
+    @apply min-h-0 min-w-0 w-full max-w-full flex-1 overflow-x-hidden overflow-y-auto pb-20 md:pb-0;
+  }
 }
 
 @layer utilities {

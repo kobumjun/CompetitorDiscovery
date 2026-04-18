@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { DashboardSidebar } from "./sidebar";
+import { MobileDashboardNav } from "./mobile-dashboard-nav";
 
 export default async function DashboardLayout({
   children,
@@ -34,9 +35,10 @@ export default async function DashboardLayout({
   };
 
   return (
-    <div className="flex h-screen bg-surface-50">
+    <div className="dashboard-layout">
       <DashboardSidebar user={userProfile} />
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="dashboard-main">{children}</main>
+      <MobileDashboardNav />
     </div>
   );
 }

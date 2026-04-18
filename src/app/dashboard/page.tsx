@@ -69,28 +69,30 @@ export default function DashboardPage() {
   const winRate = total > 0 ? Math.round((accepted / total) * 100) : 0;
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
-      <div className="mb-8">
-        <h1 className="text-display font-bold text-ink-900">Dashboard</h1>
+    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-display sm:font-black">
+          Dashboard
+        </h1>
         <p className="text-ink-500 mt-1">Your proposal command center</p>
       </div>
 
       {!loading && !hasProfile && (
         <Link
           href="/dashboard/settings"
-          className="card p-4 mb-6 flex items-center justify-between border-brand-200 bg-brand-50 hover:bg-brand-100 transition-colors block"
+          className="card mb-6 flex flex-col gap-3 border-brand-200 bg-brand-50 p-4 transition-colors hover:bg-brand-100 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-start gap-3 sm:items-center">
             <Sparkles className="w-5 h-5 text-brand-600" />
             <span className="text-sm text-brand-800 font-medium">
               Set up your business profile for personalized proposals
             </span>
           </div>
-          <ArrowRight className="w-4 h-4 text-brand-600" />
+          <ArrowRight className="hidden h-4 w-4 flex-shrink-0 text-brand-600 sm:block" />
         </Link>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <StatCard icon={FileText} label="Total Proposals" value={total} />
         <StatCard icon={Send} label="Sent" value={sent} />
         <StatCard icon={CheckCircle2} label="Accepted" value={accepted} color="text-emerald-600" />
@@ -116,8 +118,8 @@ export default function DashboardPage() {
                 : ""
           )}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3 sm:items-center">
               <Sparkles
                 className={cn(
                   "w-5 h-5 flex-shrink-0",
@@ -140,7 +142,7 @@ export default function DashboardPage() {
             <Link
               href="/pricing"
               className={cn(
-                "flex-shrink-0 ml-4 text-sm font-semibold rounded-lg px-4 py-2 transition-colors flex items-center gap-1.5",
+                "flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-center text-sm font-semibold transition-colors sm:ml-4 sm:w-auto sm:justify-center",
                 credits <= 3
                   ? "bg-brand-500 text-white hover:bg-brand-600"
                   : "text-brand-600 hover:text-brand-700 hover:bg-brand-50"
@@ -151,7 +153,7 @@ export default function DashboardPage() {
             </Link>
           </div>
           {credits > 0 && credits <= 3 && (
-            <p className="text-xs text-amber-700 mt-2 ml-8">
+            <p className="mt-2 text-xs text-amber-700 sm:ml-8">
               Running low on credits! Upgrade for more proposals at a better per-credit price.
             </p>
           )}
@@ -159,10 +161,10 @@ export default function DashboardPage() {
       )}
 
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-bold text-ink-900">Recent Proposals</h2>
           {proposals.length > 0 && (
-            <Link href="/dashboard/proposals" className="text-sm text-brand-600 font-medium hover:text-brand-700 flex items-center gap-1">
+            <Link href="/dashboard/proposals" className="flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700">
               View all <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           )}
@@ -189,11 +191,11 @@ export default function DashboardPage() {
               <Link
                 key={p.id}
                 href={`/dashboard/proposals/${p.id}`}
-                className="card-hover p-4 flex items-center justify-between group block"
+                className="card-hover group flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-ink-800 truncate">{p.title}</div>
-                  <div className="flex items-center gap-3 mt-1">
+                  <div className="truncate text-sm font-medium text-ink-800">{p.title}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span className={cn("badge text-xs", STATUS_COLOR[p.status])}>{p.status}</span>
                     {p.client && (
                       <span className="text-xs text-ink-400">{(p.client as any).company_name}</span>
@@ -209,7 +211,7 @@ export default function DashboardPage() {
                     </span>
                   </div>
                 </div>
-                <ArrowRight className="w-4 h-4 text-ink-300 group-hover:text-brand-500 transition-colors flex-shrink-0" />
+                <ArrowRight className="ml-auto h-4 w-4 flex-shrink-0 self-end text-ink-300 transition-colors group-hover:text-brand-500 sm:ml-0 sm:self-center" />
               </Link>
             ))}
           </div>
