@@ -20,6 +20,11 @@ export const metadata: Metadata = {
       "Create winning proposals in 30 seconds. AI-powered for freelancers and agencies.",
     type: "website",
   },
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "32x32" }],
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
