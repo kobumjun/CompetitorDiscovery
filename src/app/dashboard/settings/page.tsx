@@ -18,8 +18,14 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { User, OfferCategory } from "@/types";
-import { planIncludedCredits, OFFER_CATEGORIES } from "@/types";
+import type { User, OfferCategory, LeadSensitivity } from "@/types";
+import {
+  planIncludedCredits,
+  OFFER_CATEGORIES,
+  LEAD_SENSITIVITIES,
+  SENSITIVITY_LABELS,
+  SENSITIVITY_DESCRIPTIONS,
+} from "@/types";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -32,6 +38,7 @@ export default function SettingsPage() {
   const [valueProposition, setValueProposition] = useState("");
   const [targetKeywordsInput, setTargetKeywordsInput] = useState("");
   const [targetKeywords, setTargetKeywords] = useState<string[]>([]);
+  const [leadSensitivity, setLeadSensitivity] = useState<LeadSensitivity>("balanced");
   const [offerSaving, setOfferSaving] = useState(false);
   const [offerSaved, setOfferSaved] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -59,6 +66,7 @@ export default function SettingsPage() {
           setProductName(u.product_name || "");
           setValueProposition(u.value_proposition || "");
           setTargetKeywords((u.target_keywords as string[]) || []);
+          setLeadSensitivity((u.lead_sensitivity as LeadSensitivity) || "balanced");
         }
       }
       setLoading(false);
@@ -123,6 +131,7 @@ export default function SettingsPage() {
         product_name: productName,
         value_proposition: valueProposition,
         target_keywords: targetKeywords,
+        lead_sensitivity: leadSensitivity,
       })
       .eq("id", user.id);
     setOfferSaving(false);
@@ -287,6 +296,60 @@ export default function SettingsPage() {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Lead Sensitivity */}
+            <div>
+              <label className="text-xs font-medium text-ink-500 mb-2 block">
+                Lead Extraction Sensitivity
+              </label>
+              <div className="space-y-2">
+                {LEAD_SENSITIVITIES.map((mode) => {
+                  const active = leadSensitivity === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setLeadSensitivity(mode);
+                        setOfferSaved(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors",
+                        active
+                          ? "bg-brand-50 border-brand-300"
+                          : "bg-white border-surface-200 hover:border-surface-300"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                          active
+                            ? "border-brand-500"
+                            : "border-surface-300"
+                        )}
+                      >
+                        {active && (
+                          <div className="w-2 h-2 rounded-full bg-brand-500" />
+                        )}
+                      </div>
+                      <div>
+                        <span
+                          className={cn(
+                            "text-sm font-medium",
+                            active ? "text-brand-700" : "text-ink-700"
+                          )}
+                        >
+                          {SENSITIVITY_LABELS[mode]}
+                        </span>
+                        <p className="text-xs text-ink-400 mt-0.5">
+                          {SENSITIVITY_DESCRIPTIONS[mode]}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Save */}

@@ -11,6 +11,21 @@ export const OFFER_CATEGORIES = [
 
 export type OfferCategory = (typeof OFFER_CATEGORIES)[number];
 
+export const LEAD_SENSITIVITIES = ["conservative", "balanced", "aggressive"] as const;
+export type LeadSensitivity = (typeof LEAD_SENSITIVITIES)[number];
+
+export const SENSITIVITY_LABELS: Record<LeadSensitivity, string> = {
+  conservative: "Conservative",
+  balanced: "Balanced",
+  aggressive: "Aggressive",
+};
+
+export const SENSITIVITY_DESCRIPTIONS: Record<LeadSensitivity, string> = {
+  conservative: "High intent only — fewest but highest-quality leads",
+  balanced: "High + Medium intent — recommended for most use cases",
+  aggressive: "All potential leads — broadest net, more noise",
+};
+
 export interface UserOffer {
   offer_categories: OfferCategory[];
   product_name: string;
@@ -28,6 +43,7 @@ export interface User {
   product_name: string;
   value_proposition: string;
   target_keywords: string[];
+  lead_sensitivity: LeadSensitivity;
   created_at: string;
   updated_at: string;
 }

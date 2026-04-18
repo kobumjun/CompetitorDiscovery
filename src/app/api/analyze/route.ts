@@ -4,7 +4,7 @@ import { extractPostId } from "@/lib/utils";
 import { scrapeThread } from "@/lib/scraper";
 import { analyzeThread } from "@/lib/openai";
 import { deductCredits, addCredits } from "@/lib/credits";
-import type { UserOffer, OfferCategory } from "@/types";
+import type { UserOffer, OfferCategory, LeadSensitivity } from "@/types";
 
 export const maxDuration = 300;
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await serviceClient
       .from("users")
-      .select("offer_categories, product_name, value_proposition, target_keywords")
+      .select("offer_categories, product_name, value_proposition, target_keywords, lead_sensitivity")
       .eq("id", user.id)
       .single();
 
@@ -62,6 +62,8 @@ export async function POST(request: NextRequest) {
         target_keywords: (profile.target_keywords || []) as string[],
       };
     }
+
+    const sensitivity = (profile?.lead_sensitivity || "balanced") as LeadSensitivity;
 
     const { data: analysis, error: insertError } = await serviceClient
       .from("analyses")
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const threadData = await scrapeThread(postId);
-      const results = await analyzeThread(threadData, offer);
+      const results = await analyzeThread(threadData, offer, sensitivity);
 
       const { error: updateError } = await serviceClient
         .from("analyses")

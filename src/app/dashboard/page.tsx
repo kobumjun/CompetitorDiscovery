@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { formatRelativeTime, getStatusColor, extractPostId } from "@/lib/utils";
 import type { Analysis, User } from "@/types";
+import { SENSITIVITY_LABELS } from "@/types";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -123,6 +124,10 @@ export default function DashboardPage() {
                 {userProfile!.offer_categories?.length
                   ? ` (${userProfile!.offer_categories.slice(0, 2).join(", ")}${userProfile!.offer_categories.length > 2 ? "…" : ""})`
                   : ""}
+                {" · "}
+                <span className="text-ink-500">
+                  {SENSITIVITY_LABELS[userProfile!.lead_sensitivity] || "Balanced"} mode
+                </span>
               </span>
             ) : (
               <span className="text-sm text-ink-500">

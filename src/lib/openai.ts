@@ -1,5 +1,10 @@
 import OpenAI from "openai";
-import type { AnalysisResult, ThreadData, UserOffer } from "@/types";
+import type {
+  AnalysisResult,
+  ThreadData,
+  UserOffer,
+  LeadSensitivity,
+} from "@/types";
 
 function getOpenAIClient() {
   return new OpenAI({
@@ -7,19 +12,99 @@ function getOpenAIClient() {
   });
 }
 
-const BASE_SYSTEM_PROMPT = `You are a senior lead-generation analyst for freelancers, agencies, and sales teams.
+/* ------------------------------------------------------------------ */
+/*  Sensitivity-specific prompt blocks                                 */
+/* ------------------------------------------------------------------ */
 
-Your job: Given an X thread (original post + replies), extract only outreach-ready leads from public conversation.
+const SENSITIVITY_PROMPT: Record<LeadSensitivity, string> = {
+  conservative: `
+=== EXTRACTION MODE: CONSERVATIVE ===
+Extract ONLY high-intent leads — people who are explicitly requesting help, recommendations, or services RIGHT NOW.
 
-Focus on buyer intent signals:
-- asking for recommendations
-- looking for someone to help
-- expressing a concrete pain point
-- comparing tools/vendors
-- actively evaluating options
-- likely near-future service need
+Include a reply as a lead ONLY when it contains:
+- An explicit ask ("who can help?", "recommend a tool", "looking for a dev")
+- A stated buying decision ("evaluating X vs Y", "about to switch from…")
+- A direct request for service ("need someone to build…", "hiring for…")
 
-Do NOT include generic chatter, builder self-promo, or random mentions unless they show clear demand-side intent.`;
+Exclude: general interest, sympathy, experience sharing without a clear need.
+
+Target extraction rate: ~3-5% of total replies. Fewer is fine if the thread lacks strong signals.
+
+Scoring bands:
+- high (75-100): explicit request / active vendor search / hiring intent
+- medium (50-74): strong pain point with implied need for a solution
+- low (30-49): should NOT appear in conservative mode — skip these`,
+
+  balanced: `
+=== EXTRACTION MODE: BALANCED (recommended) ===
+Extract both high-intent AND medium-intent leads — anyone who could realistically become a customer with the right outreach.
+
+Include a reply as a lead when it contains ANY of:
+HIGH INTENT (always include):
+- Explicit requests for help, recommendations, or services
+- Active evaluation or comparison of tools/vendors
+- Stated buying decision or switching intent
+- Hiring signals or project context with an unmet need
+
+MEDIUM INTENT (include if substantive):
+- Concrete pain point with enough context (>10 words, not just "same")
+- Experience sharing that reveals an ongoing problem ("I've been struggling with…")
+- Engaged interest with follow-up questions ("how did you solve X?", "tell me more")
+- Agreement that implies shared need ("exactly my situation", "I need this too")
+- Indirect exploration ("has anyone tried…?", "is there a tool for…?")
+
+Exclude:
+- One-word reactions ("nice", "cool", "+1", emoji-only)
+- Pure self-promotion without a stated need
+- Off-topic or spam
+- Bot-like or generic replies under ~5 words with no context
+
+Target extraction rate: ~8-15% of total replies.
+
+Scoring bands:
+- high (70-100): explicit request / recommendation ask / vendor search / hiring
+- medium (40-69): clear pain point, follow-up questions, shared need, active exploration
+- low (20-39): faint signal but still potentially reachable — include these too`,
+
+  aggressive: `
+=== EXTRACTION MODE: AGGRESSIVE ===
+Cast the widest net. Include anyone who shows even a faint signal of relevance — the user wants to review all potential leads and filter manually.
+
+Include a reply as a lead when it contains ANY of:
+- Everything from "balanced" mode
+- Casual interest or curiosity ("oh interesting", "might check this out")
+- Related project mentions even without a stated need
+- Engaged participation in a relevant problem domain
+- Questions or comments that imply they work in a target industry
+
+Only exclude:
+- Pure emoji / one-word with zero context
+- Completely off-topic
+- Obvious spam / bots
+
+Target extraction rate: ~15-25% of total replies.
+
+Scoring bands:
+- high (70-100): explicit request / recommendation / vendor search
+- medium (40-69): pain point, exploration, curiosity, industry participation
+- low (15-39): faint signal, casual interest, tangential relevance — include these`,
+};
+
+/* ------------------------------------------------------------------ */
+/*  Base prompt + schema + scoring                                     */
+/* ------------------------------------------------------------------ */
+
+const BASE_SYSTEM_PROMPT = `You are a senior lead-generation analyst. Your job: given an X thread (original post + replies), extract outreach-ready leads from public conversation.
+
+CRITICAL: You must extract a REALISTIC number of leads. A thread with 100+ replies should typically yield 8-20 leads depending on mode. Returning only 1-2 leads from a large thread is a failure — you are being too strict. Read every reply carefully and apply the extraction mode criteria below.
+
+Intent signal types to detect:
+- looking_for_service: "who can help?", "need someone to…", "hiring…"
+- asking_for_recommendation: "recommend a tool?", "what do you use for…?"
+- expressing_pain_point: "struggling with…", "this is so hard", "broken workflow"
+- comparing_tools: "X vs Y", "switching from…", "looking for alternatives"
+- actively_evaluating: "currently evaluating", "about to choose", "testing out…"
+- potential_future_need: "might need this soon", "planning to…", "when I start…"`;
 
 const SCHEMA_INSTRUCTIONS = `
 Return JSON with this exact schema:
@@ -31,9 +116,9 @@ Return JSON with this exact schema:
     "lowIntentLeads": 0
   },
   "briefing": {
-    "summary": "2-3 sentence summary of buyer intent observed",
-    "keySignals": ["3-6 concrete signals found in the thread"],
-    "recommendedNextActions": ["3-5 short outreach actions"]
+    "summary": "2-3 sentence summary of buyer intent observed in this thread",
+    "keySignals": ["3-6 concrete intent signals found"],
+    "recommendedNextActions": ["3-5 short actionable outreach steps"]
   },
   "leads": [
     {
@@ -78,43 +163,49 @@ Return JSON with this exact schema:
 }`;
 
 const SCORING_RULES = `
-Scoring guidance:
-- high (75-100): explicit request/recommendation/vendor search right now
-- medium (45-74): clear pain + active exploration
-- low (20-44): weaker but still meaningful potential need
-
 Offer Relevance scoring (offerRelevanceScore 0-100):
 - relevant (70-100): lead's need directly matches the seller's product/service
 - partial (30-69): some overlap — the lead could benefit from the offer
 - low (0-29): weak or no connection to the seller's offer
+If offer context is provided and a lead's offerRelevanceScore < 25, you may exclude that lead.
 
 Rules:
-- Be conservative; prioritize true prospects over quantity.
-- Keep leads useful for immediate outreach.
-- If no valid lead, return empty arrays with zeroed summary.
+- Read EVERY reply — do not skip or skim.
+- Extract all leads that match the extraction mode criteria.
+- Include the EXACT quoted text from their reply (not a paraphrase).
+- If no valid lead exists, return empty arrays with zeroed summary.
 - Return ONLY valid JSON.`;
 
-function buildSystemPrompt(offer?: UserOffer | null): string {
+/* ------------------------------------------------------------------ */
+/*  Prompt builder                                                     */
+/* ------------------------------------------------------------------ */
+
+function buildSystemPrompt(
+  sensitivity: LeadSensitivity,
+  offer?: UserOffer | null
+): string {
   let prompt = BASE_SYSTEM_PROMPT;
+
+  prompt += SENSITIVITY_PROMPT[sensitivity];
 
   if (offer && offer.product_name) {
     prompt += `
 
 === SELLER'S OFFER CONTEXT ===
-The user selling/offering the following — use this to tailor scoring, outreach angles, and pitches:
+The user is selling/offering the following — tailor scoring, outreach angles, and pitches accordingly:
 - Category: ${offer.offer_categories.join(", ") || "Not specified"}
 - Product/Brand: ${offer.product_name}
 - Value Proposition: ${offer.value_proposition || "Not specified"}
 - Target Customer Keywords: ${offer.target_keywords.join(", ") || "Not specified"}
 
 Based on this context:
-1. Re-score each lead's offerRelevanceScore specifically for THIS product/service (not generic intent)
-2. Set offerRelevanceBand based on the score: "relevant" (70-100), "partial" (30-69), "low" (0-29)
-3. Provide a relevanceReason explaining why/how this lead matches the seller's offer
-4. Adjust suggestedOutreachAngle to be specific to the seller's product
-5. Write customPitchMessage: a natural, non-spammy DM that pitches the seller's specific product to this lead
-6. Rewrite draftMessages entries to pitch the seller's specific product/service naturally
-7. In briefing.recommendedNextActions, tailor actions to the seller's product`;
+1. Score each lead's offerRelevanceScore specifically for THIS product/service
+2. Set offerRelevanceBand: "relevant" (70-100), "partial" (30-69), "low" (0-29)
+3. Provide a relevanceReason explaining why this lead matches the offer
+4. Adjust suggestedOutreachAngle to reference the seller's product
+5. Write customPitchMessage: a natural, non-spammy DM pitching the seller's specific product
+6. Rewrite draftMessages to pitch the seller's product naturally
+7. Tailor briefing.recommendedNextActions to the seller's product`;
   } else {
     prompt += `
 
@@ -127,12 +218,20 @@ No specific offer context provided. Set offerRelevanceScore to 50 for all leads,
   return prompt;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Public API                                                         */
+/* ------------------------------------------------------------------ */
+
 export async function analyzeThread(
   threadData: ThreadData,
-  offer?: UserOffer | null
+  offer?: UserOffer | null,
+  sensitivity: LeadSensitivity = "balanced"
 ): Promise<AnalysisResult> {
   const threadContent = formatThreadForAnalysis(threadData);
-  const systemPrompt = buildSystemPrompt(offer);
+  const systemPrompt = buildSystemPrompt(sensitivity, offer);
+
+  const replyCount = threadData.replies.length;
+  const maxTokens = replyCount > 80 ? 8000 : replyCount > 30 ? 6000 : 4000;
 
   const openai = getOpenAIClient();
   const response = await openai.chat.completions.create({
@@ -146,7 +245,7 @@ export async function analyzeThread(
     ],
     response_format: { type: "json_object" },
     temperature: 0.3,
-    max_tokens: 4000,
+    max_tokens: maxTokens,
   });
 
   const content = response.choices[0]?.message?.content;
