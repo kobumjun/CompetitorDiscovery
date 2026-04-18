@@ -4,8 +4,8 @@ import { extractPostId } from "@/lib/utils";
 import { scrapeThread } from "@/lib/scraper";
 import { analyzeThread } from "@/lib/openai";
 import { deductCredits, addCredits } from "@/lib/credits";
+import type { UserOffer, OfferCategory } from "@/types";
 
-/** Allow long-running scrape + LLM on Vercel (configure plan / dashboard as needed). */
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
@@ -46,6 +46,23 @@ export async function POST(request: NextRequest) {
     }
 
     const serviceClient = await createServiceClient();
+
+    const { data: profile } = await serviceClient
+      .from("users")
+      .select("offer_categories, product_name, value_proposition, target_keywords")
+      .eq("id", user.id)
+      .single();
+
+    let offer: UserOffer | null = null;
+    if (profile?.product_name) {
+      offer = {
+        offer_categories: (profile.offer_categories || []) as OfferCategory[],
+        product_name: profile.product_name as string,
+        value_proposition: (profile.value_proposition || "") as string,
+        target_keywords: (profile.target_keywords || []) as string[],
+      };
+    }
+
     const { data: analysis, error: insertError } = await serviceClient
       .from("analyses")
       .insert({
@@ -70,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const threadData = await scrapeThread(postId);
-      const results = await analyzeThread(threadData);
+      const results = await analyzeThread(threadData, offer);
 
       const { error: updateError } = await serviceClient
         .from("analyses")
@@ -85,7 +102,10 @@ export async function POST(request: NextRequest) {
         console.error("Failed to persist completed analysis:", updateError);
         await serviceClient
           .from("analyses")
-          .update({ status: "failed", completed_at: new Date().toISOString() })
+          .update({
+            status: "failed",
+            completed_at: new Date().toISOString(),
+          })
           .eq("id", analysisId);
         await addCredits(user.id, 1);
         return NextResponse.json(

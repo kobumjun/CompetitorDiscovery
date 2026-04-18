@@ -11,12 +11,13 @@ import {
   AlertCircle,
   Target,
   Clock,
-  ExternalLink,
   Sparkles,
   ArrowUpRight,
+  Package,
+  Settings,
 } from "lucide-react";
 import { formatRelativeTime, getStatusColor, extractPostId } from "@/lib/utils";
-import type { Analysis } from "@/types";
+import type { Analysis, User } from "@/types";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function DashboardPage() {
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
   const [loadingData, setLoadingData] = useState(true);
+  const [userProfile, setUserProfile] = useState<User | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -36,23 +38,29 @@ export default function DashboardPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const [analysesRes, creditsRes] = await Promise.all([
+      const [analysesRes, profileRes] = await Promise.all([
         supabase
           .from("analyses")
           .select("*")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(5),
-        supabase.from("users").select("credits").eq("id", user.id).single(),
+        supabase.from("users").select("*").eq("id", user.id).single(),
       ]);
 
       if (analysesRes.data) setAnalyses(analysesRes.data as Analysis[]);
-      if (creditsRes.data) setCredits(creditsRes.data.credits);
+      if (profileRes.data) {
+        const p = profileRes.data as User;
+        setCredits(p.credits);
+        setUserProfile(p);
+      }
       setLoadingData(false);
     }
 
     fetchData();
   }, []);
+
+  const hasOffer = userProfile?.product_name?.trim();
 
   async function handleAnalyze(e: React.FormEvent) {
     e.preventDefault();
@@ -103,6 +111,36 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {/* My Offer Context */}
+      {!loadingData && (
+        <div className="card p-4 mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <Package className="w-5 h-5 text-brand-500 flex-shrink-0" />
+            {hasOffer ? (
+              <span className="text-sm text-ink-700 truncate">
+                Leads will be scored for{" "}
+                <strong className="text-ink-900">{userProfile!.product_name}</strong>
+                {userProfile!.offer_categories?.length
+                  ? ` (${userProfile!.offer_categories.slice(0, 2).join(", ")}${userProfile!.offer_categories.length > 2 ? "…" : ""})`
+                  : ""}
+              </span>
+            ) : (
+              <span className="text-sm text-ink-500">
+                Set up your offer profile so leads are scored and pitches are
+                tailored to your product.
+              </span>
+            )}
+          </div>
+          <Link
+            href="/dashboard/settings"
+            className="btn-ghost text-xs flex-shrink-0"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            {hasOffer ? "Edit" : "Set Up"}
+          </Link>
+        </div>
+      )}
+
       {/* URL Input */}
       <form onSubmit={handleAnalyze} className="card p-6 mb-6">
         <div className="flex flex-col sm:flex-row gap-3">
@@ -145,7 +183,8 @@ export default function DashboardPage() {
         )}
 
         <p className="text-xs text-ink-400 mt-3">
-          Supports public X/Twitter threads with replies. One thread analysis costs 1 credit.
+          Supports public X/Twitter threads with replies. One thread analysis
+          costs 1 credit.
         </p>
       </form>
 
@@ -164,14 +203,18 @@ export default function DashboardPage() {
               {credits === 0 ? (
                 <>
                   No credits remaining.{" "}
-                  <Link href="/pricing" className="text-brand-600 font-semibold hover:underline">
+                  <Link
+                    href="/pricing"
+                    className="text-brand-600 font-semibold hover:underline"
+                  >
                     Upgrade your plan
                   </Link>{" "}
                   to continue.
                 </>
               ) : (
                 <>
-                  You have <strong className="text-ink-900">{credits}</strong> credit
+                  You have{" "}
+                  <strong className="text-ink-900">{credits}</strong> credit
                   {credits !== 1 ? "s" : ""} remaining
                 </>
               )}
@@ -207,7 +250,9 @@ export default function DashboardPage() {
         ) : analyses.length === 0 ? (
           <div className="card p-12 text-center">
             <Target className="w-10 h-10 text-ink-300 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-ink-700 mb-1">No lead runs yet</h3>
+            <h3 className="text-base font-semibold text-ink-700 mb-1">
+              No lead runs yet
+            </h3>
             <p className="text-sm text-ink-400">
               Paste a public thread URL above to start extracting leads
             </p>
@@ -240,7 +285,9 @@ export default function DashboardPage() {
                       </span>
                       {analysis.status === "completed" && analysis.results && (
                         <span className="text-xs text-ink-500">
-                          {(analysis.results as any).leadSummary?.totalLeads || 0} leads
+                          {(analysis.results as any).leadSummary?.totalLeads ||
+                            0}{" "}
+                          leads
                         </span>
                       )}
                     </div>

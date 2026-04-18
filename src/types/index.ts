@@ -1,9 +1,33 @@
+export const OFFER_CATEGORIES = [
+  "SaaS / Software Tool",
+  "Insurance",
+  "Financial Product",
+  "Education / Coaching",
+  "Consulting",
+  "Physical Product",
+  "Agency Service",
+  "Other",
+] as const;
+
+export type OfferCategory = (typeof OFFER_CATEGORIES)[number];
+
+export interface UserOffer {
+  offer_categories: OfferCategory[];
+  product_name: string;
+  value_proposition: string;
+  target_keywords: string[];
+}
+
 export interface User {
   id: string;
   email: string;
   credits: number;
   plan: PlanType;
   plan_expires_at: string | null;
+  offer_categories: OfferCategory[];
+  product_name: string;
+  value_proposition: string;
+  target_keywords: string[];
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +52,7 @@ export type AnalysisStatus = "pending" | "processing" | "completed" | "failed";
 
 export interface AnalysisResult {
   threadInfo: ThreadInfo;
+  offerContext: { productName: string; categories: string[] } | null;
   leadSummary: LeadSummary;
   briefing: LeadBriefing;
   leads: Lead[];
@@ -79,6 +104,8 @@ export interface LeadBriefing {
   recommendedNextActions: string[];
 }
 
+export type OfferRelevanceBand = "relevant" | "partial" | "low";
+
 export interface Lead {
   displayName: string;
   handle: string;
@@ -91,6 +118,10 @@ export interface Lead {
   profileLink: string;
   postLink: string | null;
   outreachDraft: string | null;
+  offerRelevanceScore: number;
+  offerRelevanceBand: OfferRelevanceBand;
+  relevanceReason: string;
+  customPitchMessage: string | null;
 }
 
 export interface IntentBreakdownItem {
