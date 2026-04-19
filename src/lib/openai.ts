@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { BusinessProfile, ProposalContent, ProposalTone } from "@/types";
+import type { BusinessProfile, ProposalContent, ProposalTone, OutreachType } from "@/types";
 
 function getOpenAIClient() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -91,4 +91,106 @@ Rules:
   if (!content) throw new Error("No response from OpenAI");
 
   return JSON.parse(content) as ProposalContent;
+}
+
+interface WebsiteAnalysis {
+  companyName: string;
+  industry: string;
+  description: string;
+  keyPeople: string[];
+}
+
+interface GenerateOutreachInput {
+  type: OutreachType;
+  senderName: string;
+  businessName: string;
+  industry: string;
+  services: string;
+  tone: string;
+  leadCompanyName: string;
+  leadIndustry: string;
+  leadInfo: string;
+  context: string;
+}
+
+export async function analyzeWebsiteContent(rawContent: string): Promise<WebsiteAnalysis> {
+  const openai = getOpenAIClient();
+  const content = rawContent.slice(0, 3000);
+
+  const prompt = `Analyze this website content and return a JSON object.
+
+Content:
+"${content}"
+
+Return:
+{
+  "companyName": "Company or organization name",
+  "industry": "Industry/sector",
+  "description": "2-3 sentence summary of what they do",
+  "keyPeople": ["Names of founders/leaders if mentioned"]
+}
+
+Rules:
+- If unknown, use empty string or [].
+- Return only valid JSON.`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: prompt }],
+    response_format: { type: "json_object" },
+    temperature: 0.3,
+  });
+
+  const raw = response.choices[0]?.message?.content;
+  if (!raw) throw new Error("No response from OpenAI");
+
+  return JSON.parse(raw) as WebsiteAnalysis;
+}
+
+export async function generateOutreachEmail(input: GenerateOutreachInput): Promise<{ subject: string; body: string }> {
+  const openai = getOpenAIClient();
+
+  const typePrompts: Record<OutreachType, string> = {
+    proposal: "formal project proposal offering services",
+    pitch: "compelling sales pitch introducing products/services",
+    investment: "investment proposal pitching for funding or partnership",
+    quote: "quote/estimate for specific services with pricing breakdown",
+  };
+
+  const prompt = `Generate a professional ${typePrompts[input.type]} email.
+
+Sender:
+- Name: ${input.senderName}
+- Business: ${input.businessName}
+- Industry: ${input.industry}
+- Services: ${input.services}
+
+Recipient Company:
+- Name: ${input.leadCompanyName}
+- Industry: ${input.leadIndustry}
+- About: ${input.leadInfo}
+
+Additional Context from Sender: ${input.context || "None"}
+
+Return JSON:
+{
+  "subject": "Compelling subject line under 60 chars",
+  "body": "Full email body. Start with 'Hi'. Make it specific to recipient company. Include CTA and sender signature."
+}
+
+Style: ${input.tone}
+Keep body 150-250 words.
+Return only valid JSON.`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "system", content: prompt }],
+    response_format: { type: "json_object" },
+    temperature: 0.8,
+  });
+
+  const raw = response.choices[0]?.message?.content;
+  if (!raw) throw new Error("No response from OpenAI");
+
+  return JSON.parse(raw) as { subject: string; body: string };
 }

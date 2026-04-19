@@ -126,6 +126,42 @@ export interface Subscription {
   updated_at: string;
 }
 
+export type EmailConfidence = "high" | "medium" | "low";
+
+export interface ExtractedEmail {
+  email: string;
+  source: string;
+  confidence: EmailConfidence;
+}
+
+export interface ExtractedLead {
+  id: string;
+  user_id: string;
+  source_url: string;
+  company_name: string | null;
+  company_info: string | null;
+  industry: string | null;
+  emails: ExtractedEmail[];
+  outreach_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type OutreachType = "proposal" | "pitch" | "investment" | "quote";
+export type OutreachStatus = "draft" | "sent" | "failed";
+
+export interface Outreach {
+  id: string;
+  lead_id: string;
+  type: OutreachType;
+  recipient_email: string;
+  subject: string;
+  body: string;
+  status: OutreachStatus;
+  sent_at: string | null;
+  created_at: string;
+}
+
 export const PLAN_MONTHLY_CREDITS = {
   pro: 50,
   agency: 200,

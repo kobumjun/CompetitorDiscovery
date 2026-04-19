@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   FileText,
   Users,
+  Target,
   Settings,
   LogOut,
   CreditCard,
@@ -21,6 +22,7 @@ import { SiteFooter } from "@/components/site-footer";
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
   { href: "/dashboard/proposals", icon: FileText, label: "Proposals", exact: false },
+  { href: "/dashboard/leads", icon: Target, label: "Lead Extraction", exact: false },
   { href: "/dashboard/clients", icon: Users, label: "Clients", exact: false },
   { href: "/dashboard/settings", icon: Settings, label: "Settings", exact: false },
 ];

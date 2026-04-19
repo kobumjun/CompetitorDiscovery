@@ -157,3 +157,20 @@ export async function sendProposalRejectedNotification(params: {
     `,
   });
 }
+
+export async function sendCustomOutreachEmail(params: {
+  fromName: string;
+  replyTo: string;
+  to: string;
+  subject: string;
+  body: string;
+}) {
+  const resend = getResend();
+  await resend.emails.send({
+    from: `${params.fromName} <onboarding@resend.dev>`,
+    replyTo: params.replyTo,
+    to: params.to,
+    subject: params.subject,
+    html: params.body.replace(/\n/g, "<br>"),
+  });
+}

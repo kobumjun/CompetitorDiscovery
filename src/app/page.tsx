@@ -51,19 +51,19 @@ export default function LandingPage() {
         <div className="relative max-w-4xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-50 border border-brand-200 rounded-full text-xs font-semibold text-brand-700 mb-6">
             <Zap className="w-3.5 h-3.5" />
-            AI-powered proposal generation
+            Website to outreach automation
           </div>
           <h1 className="text-display-xl font-black text-ink-900 mb-6 leading-tight">
-            Create winning proposals in{" "}
-            <span className="gradient-text">30 seconds</span>, not 3 hours
+            From Website to{" "}
+            <span className="gradient-text">Closed Deal</span> in Minutes
           </h1>
           <p className="text-lg md:text-xl text-ink-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            AI-powered proposal generator for freelancers, agencies, and consultants.
-            Describe your project, get a polished, ready-to-send proposal with pricing, timeline, and terms.
+            Extract contacts from any website. Generate personalized proposals, pitches,
+            and outreach emails. All in one tool.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
             <Link href="/signup" className="btn-primary text-base px-8 py-3">
-              Start Free — 5 Proposals
+              Start Free - Try It Now
               <ArrowRight className="w-5 h-5" />
             </Link>
             <a href="#how-it-works" className="btn-secondary text-base px-6 py-3">
@@ -229,12 +229,12 @@ export default function LandingPage() {
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { icon: Sparkles, title: "AI Generation", desc: "GPT-4o creates professional proposals from your project description in under 30 seconds." },
-              { icon: PenTool, title: "Fully Editable", desc: "Every section is editable. Click to modify cover letter, pricing, terms — make it yours." },
-              { icon: Eye, title: "View Tracking", desc: "Know exactly when your client opens and views the proposal. Never wonder again." },
-              { icon: FileText, title: "E-Signatures", desc: "Clients can accept and sign proposals directly from the shared link. No extra tools needed." },
-              { icon: Users, title: "Client Management", desc: "Save client details and reuse them across proposals. Build your client database." },
-              { icon: Clock, title: "PDF & Print", desc: "Export proposals as PDF or print them. Professional formatting included." },
+              { icon: Eye, title: "Auto Email Extraction", desc: "Scan website contact pages and extract usable business emails in one click." },
+              { icon: Sparkles, title: "4 Outreach Types", desc: "Generate Proposals, Pitches, Investment outreach, and Quotes tailored to each lead." },
+              { icon: Send, title: "Send or Copy Instantly", desc: "Send via Resend directly from dashboard, or copy polished drafts to clipboard." },
+              { icon: BarChart3, title: "Outreach Tracking", desc: "Track extracted leads and all outreach drafts/sent status in one place." },
+              { icon: Users, title: "Client + Lead Workflow", desc: "Turn unknown websites into qualified contacts and active conversations quickly." },
+              { icon: Shield, title: "Permission First", desc: "Built with a clear permission notice to avoid spam and keep outreach responsible." },
             ].map((feature) => (
               <div key={feature.title} className="card p-6 group hover:shadow-card-hover transition-all">
                 <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center mb-4 group-hover:bg-brand-100 transition-colors">
