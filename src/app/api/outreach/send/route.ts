@@ -15,13 +15,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (!user.email) {
-      return NextResponse.json(
-        { error: "User email is required so recipients can reply to you." },
-        { status: 400 }
-      );
-    }
-
     const { outreachIds, subject, body } = await request.json();
     if (!Array.isArray(outreachIds) || outreachIds.length === 0 || !subject || !body) {
       return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
@@ -56,7 +49,7 @@ export async function POST(request: NextRequest) {
         try {
           await sendCustomOutreachEmail({
             fromName: senderName,
-            replyTo: user.email,
+            ...(user.email ? { replyTo: user.email } : {}),
             to: outreach.recipient_email,
             subject,
             body,
