@@ -31,6 +31,7 @@ export default function LeadDetailPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showFirstSuccess, setShowFirstSuccess] = useState(false);
 
   const emails = useMemo<ExtractedEmail[]>(
     () => (lead?.emails && Array.isArray(lead.emails) ? lead.emails : []),
@@ -90,6 +91,9 @@ export default function LeadDetailPage() {
 
       setSubject(payload.subject || "");
       setBody(payload.body || "");
+      if ((lead.outreach_count ?? 0) === 0) {
+        setShowFirstSuccess(true);
+      }
       await fetchLead();
     } catch {
       setError("Unexpected error while generating outreach.");
@@ -228,14 +232,14 @@ export default function LeadDetailPage() {
         </div>
         <div className="flex items-center justify-between mt-4">
           <span className="text-xs text-ink-500">{selectedEmails.length} selected</span>
-          <span className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded-md">
-            You must have permission to contact these emails.
+          <span className="text-xs text-ink-500 bg-surface-100 px-2 py-1 rounded-md">
+            Tip: use this tool for businesses you have a genuine reason to contact.
           </span>
         </div>
       </section>
 
       <section className="card p-5 space-y-4">
-        <h2 className="text-lg font-semibold text-ink-900">Compose Outreach</h2>
+        <h2 className="text-lg font-semibold text-ink-900">Write Your Email</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {OUTREACH_TYPES.map((item) => (
             <button
@@ -324,6 +328,19 @@ export default function LeadDetailPage() {
 
         {error && <p className="text-sm text-red-600">{error}</p>}
         {notice && <p className="text-sm text-emerald-700">{notice}</p>}
+        {showFirstSuccess && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+            <h3 className="text-sm font-semibold text-emerald-800">🎉 First outreach generated!</h3>
+            <p className="text-sm text-emerald-700 mt-1">You just saved around 30 minutes of work.</p>
+            <p className="text-xs text-ink-500 mt-3">
+              Complete your business profile for even more personalized emails in
+              {" "}
+              <Link href="/dashboard/settings" className="text-brand-600 hover:text-brand-700">
+                Settings
+              </Link>.
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );

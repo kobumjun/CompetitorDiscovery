@@ -20,7 +20,7 @@ const NAV_ITEMS: {
 }[] = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Home", exact: true },
   { href: "/dashboard/proposals", icon: FileText, label: "Proposals", exact: false },
-  { href: "/dashboard/leads", icon: Target, label: "Leads", exact: false },
+  { href: "/dashboard/leads", icon: Target, label: "Contacts", exact: false },
   { href: "/dashboard/clients", icon: Users, label: "Clients", exact: false },
   { href: "/dashboard/settings", icon: Settings, label: "Settings", exact: false },
 ];

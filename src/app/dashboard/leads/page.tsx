@@ -13,6 +13,12 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(false);
   const [bootLoading, setBootLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const progressSteps = [
+    "Fetching website...",
+    "Analyzing company...",
+    "Extracting emails...",
+    "Preparing results...",
+  ];
 
   async function fetchLeads() {
     const supabase = createClient();
@@ -63,7 +69,7 @@ export default function LeadsPage() {
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
       <div className="mb-8">
-        <h1 className="text-display font-bold text-ink-900">Lead Extraction</h1>
+        <h1 className="text-display font-bold text-ink-900">Find Contacts</h1>
         <p className="text-ink-500 mt-1">
           Extract contacts from any website and generate personalized outreach.
         </p>
@@ -84,12 +90,21 @@ export default function LeadsPage() {
             className="btn-primary sm:min-w-[170px]"
           >
             <Sparkles className="w-4 h-4" />
-            {loading ? "Extracting..." : "Extract Emails"}
+            {loading ? "Extracting..." : "Find Contacts"}
           </button>
         </div>
         <p className="text-xs text-ink-400 mt-3">
-          1 credit per extraction. You must have permission to contact extracted emails.
+          1 credit per extraction. Tip: use this for businesses you have a genuine reason to contact.
         </p>
+        {loading && (
+          <div className="mt-3 rounded-lg border border-surface-200 bg-surface-50 p-3">
+            {progressSteps.map((step, idx) => (
+              <div key={step} className="text-xs text-ink-500 py-0.5">
+                {idx < 2 ? "●" : "○"} {step}
+              </div>
+            ))}
+          </div>
+        )}
         {error && (
           <p className="text-sm text-red-600 mt-3">{error}</p>
         )}
@@ -105,15 +120,30 @@ export default function LeadsPage() {
           ))}
         </div>
       ) : leads.length === 0 ? (
-        <div className="card p-12 text-center">
-          <Globe className="w-10 h-10 text-ink-300 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-ink-700 mb-1">No leads yet</h3>
-          <p className="text-sm text-ink-400 mb-4">
-            Enter a website URL to extract contact emails.
-          </p>
-          <button onClick={() => setUrl("https://")} className="btn-secondary">
-            <Plus className="w-4 h-4" /> Try your first extraction
-          </button>
+        <div className="card p-8">
+          <div className="text-center mb-5">
+            <Globe className="w-10 h-10 text-ink-300 mx-auto mb-3" />
+            <h3 className="text-base font-semibold text-ink-700 mb-1">No contacts yet</h3>
+            <p className="text-sm text-ink-400">Paste a URL above to try with any company.</p>
+          </div>
+          <div className="max-w-xl mx-auto rounded-xl border border-surface-200 bg-surface-50 p-4">
+            <div className="flex items-center justify-between">
+              <strong className="text-sm text-ink-900">Stripe Inc.</strong>
+              <span className="badge bg-brand-50 text-brand-700">Fintech / Payments</span>
+            </div>
+            <p className="text-sm text-ink-500 mt-2">
+              Payment infrastructure for internet businesses with APIs for online commerce.
+            </p>
+            <div className="mt-3 flex items-center gap-4 text-xs text-ink-500">
+              <span>📧 3 emails found</span>
+              <span>🎯 2 high confidence</span>
+            </div>
+          </div>
+          <div className="text-center mt-4">
+            <button onClick={() => setUrl("https://")} className="btn-secondary">
+              <Plus className="w-4 h-4" /> Try your first extraction
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-2">

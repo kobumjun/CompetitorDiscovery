@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { NewUserOnboarding } from "@/components/new-user-onboarding";
 import {
   FileText,
   Send,
+  Target,
   CheckCircle2,
   TrendingUp,
   Plus,
@@ -14,8 +16,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
-import type { Proposal } from "@/types";
+import type { ExtractedLead, Proposal } from "@/types";
 import { formatCurrency } from "@/types";
+import type { User } from "@supabase/supabase-js";
 
 const STATUS_COLOR: Record<string, string> = {
   draft: "bg-surface-100 text-ink-600",
@@ -28,8 +31,11 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function DashboardPage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [recentLeads, setRecentLeads] = useState<ExtractedLead[]>([]);
+  const [leadCount, setLeadCount] = useState(0);
   const [credits, setCredits] = useState<number | null>(null);
   const [hasProfile, setHasProfile] = useState(true);
+  const [authUser, setAuthUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,25 +45,38 @@ export default function DashboardPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      setAuthUser(user);
 
-      const [proposalsRes, profileRes, creditsRes] = await Promise.all([
+      const [proposalsRes, profileRes, creditsRes, leadCountRes, recentLeadsRes] = await Promise.all([
         supabase
           .from("proposals")
           .select("*, client:clients(*)")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
-          .limit(5),
+          .limit(3),
         supabase
           .from("business_profiles")
           .select("id")
           .eq("user_id", user.id)
           .maybeSingle(),
         supabase.from("users").select("credits").eq("id", user.id).single(),
+        supabase
+          .from("extracted_leads")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id),
+        supabase
+          .from("extracted_leads")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(3),
       ]);
 
       if (proposalsRes.data) setProposals(proposalsRes.data as Proposal[]);
       if (!profileRes.data) setHasProfile(false);
       if (creditsRes.data) setCredits(creditsRes.data.credits);
+      setLeadCount(leadCountRes.count ?? 0);
+      if (recentLeadsRes.data) setRecentLeads(recentLeadsRes.data as ExtractedLead[]);
       setLoading(false);
     }
     fetchData();
@@ -67,6 +86,11 @@ export default function DashboardPage() {
   const sent = proposals.filter((p) => p.status === "sent" || p.status === "viewed").length;
   const accepted = proposals.filter((p) => p.status === "accepted").length;
   const winRate = total > 0 ? Math.round((accepted / total) * 100) : 0;
+  const hasCreatedAnything = leadCount > 0 || proposals.length > 0;
+
+  if (!loading && authUser && !hasCreatedAnything) {
+    return <NewUserOnboarding user={authUser} />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
@@ -92,20 +116,41 @@ export default function DashboardPage() {
         </Link>
       )}
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+        <Link
+          href="/dashboard/leads"
+          className="card-hover p-5 border-brand-200 bg-brand-50"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-brand-600" />
+              <h3 className="text-base font-bold text-ink-900">Find Contacts</h3>
+            </div>
+            <ArrowRight className="w-4 h-4 text-brand-600" />
+          </div>
+          <p className="text-sm text-ink-600 mt-2">Paste any website URL to extract emails and start outreach.</p>
+        </Link>
+        <Link
+          href="/dashboard/proposals/new"
+          className="card-hover p-5"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-ink-700" />
+              <h3 className="text-base font-bold text-ink-900">Create Proposal</h3>
+            </div>
+            <ArrowRight className="w-4 h-4 text-ink-400" />
+          </div>
+          <p className="text-sm text-ink-500 mt-2">Generate a full project proposal with timeline and pricing.</p>
+        </Link>
+      </div>
+
       <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <StatCard icon={FileText} label="Total Proposals" value={total} />
         <StatCard icon={Send} label="Sent" value={sent} />
         <StatCard icon={CheckCircle2} label="Accepted" value={accepted} color="text-emerald-600" />
         <StatCard icon={TrendingUp} label="Win Rate" value={`${winRate}%`} />
       </div>
-
-      <Link
-        href="/dashboard/proposals/new"
-        className="btn-primary w-full h-14 text-base mb-8 justify-center"
-      >
-        <Plus className="w-5 h-5" />
-        Create New Proposal
-      </Link>
 
       {credits !== null && (
         <div
@@ -162,7 +207,7 @@ export default function DashboardPage() {
 
       <div>
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-bold text-ink-900">Recent Proposals</h2>
+          <h2 className="text-lg font-bold text-ink-900">Recent Activity</h2>
           {proposals.length > 0 && (
             <Link href="/dashboard/proposals" className="flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700">
               View all <ArrowRight className="w-3.5 h-3.5" />
@@ -179,41 +224,73 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
-        ) : proposals.length === 0 ? (
+        ) : proposals.length === 0 && recentLeads.length === 0 ? (
           <div className="card p-12 text-center">
             <FileText className="w-10 h-10 text-ink-300 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-ink-700 mb-1">No proposals yet</h3>
-            <p className="text-sm text-ink-400">Create your first AI-generated proposal</p>
+            <h3 className="text-base font-semibold text-ink-700 mb-1">No activity yet</h3>
+            <p className="text-sm text-ink-400">Start with Find Contacts to see your first results.</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {proposals.map((p) => (
-              <Link
-                key={p.id}
-                href={`/dashboard/proposals/${p.id}`}
-                className="card-hover group flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-ink-800">{p.title}</div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className={cn("badge text-xs", STATUS_COLOR[p.status])}>{p.status}</span>
-                    {p.client && (
-                      <span className="text-xs text-ink-400">{(p.client as any).company_name}</span>
-                    )}
-                    {p.total_amount && (
-                      <span className="text-xs text-ink-500 font-medium">
-                        {formatCurrency(p.total_amount, p.currency)}
-                      </span>
-                    )}
-                    <span className="text-xs text-ink-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {formatRelativeTime(p.created_at)}
-                    </span>
-                  </div>
-                </div>
-                <ArrowRight className="ml-auto h-4 w-4 flex-shrink-0 self-end text-ink-300 transition-colors group-hover:text-brand-500 sm:ml-0 sm:self-center" />
-              </Link>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="text-sm font-semibold text-ink-700 mb-2">Recent Leads</div>
+              <div className="space-y-2">
+                {recentLeads.length === 0 ? (
+                  <div className="card p-4 text-xs text-ink-400">No leads yet.</div>
+                ) : (
+                  recentLeads.map((lead) => {
+                    const emailCount = Array.isArray(lead.emails) ? lead.emails.length : 0;
+                    return (
+                      <Link
+                        key={lead.id}
+                        href={`/dashboard/leads/${lead.id}`}
+                        className="card-hover group flex items-center justify-between p-4"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-ink-800">
+                            {lead.company_name || lead.source_url}
+                          </div>
+                          <div className="mt-1 text-xs text-ink-400">
+                            {emailCount} email{emailCount !== 1 ? "s" : ""} · {formatRelativeTime(lead.created_at)}
+                          </div>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-ink-300 group-hover:text-brand-500" />
+                      </Link>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-ink-700 mb-2">Recent Proposals</div>
+              <div className="space-y-2">
+                {proposals.length === 0 ? (
+                  <div className="card p-4 text-xs text-ink-400">No proposals yet.</div>
+                ) : (
+                  proposals.map((p) => (
+                    <Link
+                      key={p.id}
+                      href={`/dashboard/proposals/${p.id}`}
+                      className="card-hover group flex flex-col gap-2 p-4"
+                    >
+                      <div className="truncate text-sm font-medium text-ink-800">{p.title}</div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className={cn("badge text-xs", STATUS_COLOR[p.status])}>{p.status}</span>
+                        {p.total_amount && (
+                          <span className="text-xs text-ink-500 font-medium">
+                            {formatCurrency(p.total_amount, p.currency)}
+                          </span>
+                        )}
+                        <span className="text-xs text-ink-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatRelativeTime(p.created_at)}
+                        </span>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

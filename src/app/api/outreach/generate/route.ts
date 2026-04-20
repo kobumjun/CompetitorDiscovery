@@ -62,10 +62,10 @@ export async function POST(request: NextRequest) {
     try {
       const generated = await generateOutreachEmail({
         type,
-        senderName: profile?.owner_name || user.email || "ProposalPilot User",
-        businessName: profile?.business_name || "Independent Professional",
+        senderName: profile?.owner_name || user.user_metadata?.name || "Me",
+        businessName: profile?.business_name || "",
         industry: profile?.industry || "N/A",
-        services: profile?.services?.join(", ") || "N/A",
+        services: profile?.services?.join(", ") || "services",
         tone: profile?.tone || "professional",
         leadCompanyName: lead.company_name || "their company",
         leadIndustry: lead.industry || "N/A",
