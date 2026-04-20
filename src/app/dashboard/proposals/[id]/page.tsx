@@ -38,9 +38,10 @@ export default function ProposalEditorPage() {
   const [copied, setCopied] = useState(false);
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [sendEmail, setSendEmail] = useState("");
-  const [sending, setSending] = useState(false);
+  const [bccSelf, setBccSelf] = useState(true);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [openingEmail, setOpeningEmail] = useState(false);
   const [sendError, setSendError] = useState("");
-  const [sendSuccess, setSendSuccess] = useState(false);
 
   const fetchProposal = useCallback(async () => {
     const res = await fetch(`/api/proposals/${params.id}`);
@@ -54,6 +55,11 @@ export default function ProposalEditorPage() {
   useEffect(() => {
     fetchProposal();
   }, [fetchProposal]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setUserEmail(data.user?.email || null));
+  }, []);
 
   async function updateField(field: string, value: unknown) {
     if (!proposal) return;
@@ -75,31 +81,38 @@ export default function ProposalEditorPage() {
 
   async function handleSendEmail() {
     if (!proposal || !sendEmail.trim()) return;
-    setSending(true);
+    setOpeningEmail(true);
     setSendError("");
+
     try {
-      const res = await fetch(`/api/proposals/${proposal.id}/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recipientEmail: sendEmail.trim() }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setSendError(data.error || "Failed to send");
-        setSending(false);
-        return;
-      }
-      setSendSuccess(true);
+      const recipient = sendEmail.trim();
+      const shareUrl = `${window.location.origin}/proposal/view/${proposal.share_token}`;
+      const clientName = proposal.client && (proposal.client as any)?.contact_name
+        ? (proposal.client as any).contact_name
+        : "there";
+      const owner = (proposal as any)?.owner_name || "there";
+      const subject = `Proposal: ${proposal.project_name || proposal.title}`;
+      const body =
+        `Hi ${clientName},\n\n` +
+        `I've prepared a proposal for ${proposal.project_name || proposal.title}. ` +
+        `You can view and sign it here:\n\n${shareUrl}\n\n` +
+        `Looking forward to your feedback.\n\nBest regards,\n${owner}`;
+      const bcc = bccSelf && userEmail ? `&bcc=${encodeURIComponent(userEmail)}` : "";
+      const mailtoLink = `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}${bcc}`;
+      window.location.href = mailtoLink;
+
       setProposal((prev) => (prev ? { ...prev, status: "sent" } : prev));
-      setTimeout(() => {
-        setShowSendDialog(false);
-        setSendSuccess(false);
-        setSendEmail("");
-      }, 2000);
+      await fetch(`/api/proposals/${proposal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "sent" }),
+      });
+      setShowSendDialog(false);
+      setSendEmail("");
     } catch {
-      setSendError("Network error. Try again.");
+      setSendError("Failed to open email client. Please try again.");
     } finally {
-      setSending(false);
+      setOpeningEmail(false);
     }
   }
 
@@ -188,36 +201,39 @@ export default function ProposalEditorPage() {
 
       {showSendDialog && (
         <div className="card p-5 mb-6 animate-in border-brand-200">
-          <h3 className="text-sm font-bold text-ink-900 mb-3">Send proposal via email</h3>
-          {sendSuccess ? (
-            <div className="flex items-center gap-2 text-emerald-700">
-              <Check className="w-4 h-4" /> Proposal sent to {sendEmail}
-            </div>
-          ) : (
-            <>
-              <div className="flex gap-2 mb-2">
-                <input
-                  value={sendEmail}
-                  onChange={(e) => setSendEmail(e.target.value)}
-                  className="input-field flex-1"
-                  placeholder="client@example.com"
-                  type="email"
-                />
-                <button
-                  onClick={handleSendEmail}
-                  disabled={sending || !sendEmail.trim()}
-                  className="btn-primary text-sm"
-                >
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  Send
-                </button>
-                <button onClick={() => setShowSendDialog(false)} className="btn-ghost text-sm">
-                  Cancel
-                </button>
-              </div>
-              {sendError && <p className="text-xs text-red-600">{sendError}</p>}
-            </>
-          )}
+          <h3 className="text-sm font-bold text-ink-900 mb-3">Open proposal in your email client</h3>
+          <div className="flex gap-2 mb-2">
+            <input
+              value={sendEmail}
+              onChange={(e) => setSendEmail(e.target.value)}
+              className="input-field flex-1"
+              placeholder="client@example.com"
+              type="email"
+            />
+            <button
+              onClick={handleSendEmail}
+              disabled={openingEmail || !sendEmail.trim()}
+              className="btn-primary text-sm"
+            >
+              {openingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Open Email
+            </button>
+            <button onClick={() => setShowSendDialog(false)} className="btn-ghost text-sm">
+              Cancel
+            </button>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-ink-600 mb-2">
+            <input
+              type="checkbox"
+              checked={bccSelf}
+              onChange={(e) => setBccSelf(e.target.checked)}
+            />
+            Also send a copy to myself (BCC)
+          </label>
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            This opens your own mail app with recipient, subject, and body pre-filled.
+          </p>
+          {sendError && <p className="text-xs text-red-600 mt-2">{sendError}</p>}
         </div>
       )}
 

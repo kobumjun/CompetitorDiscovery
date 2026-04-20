@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { sendProposalToClient } from "@/lib/email";
+import { generateProposalEmailMailto } from "@/lib/email";
 import { formatCurrency } from "@/types";
 
 export async function POST(
@@ -46,43 +46,34 @@ export async function POST(
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
   const shareUrl = `${appUrl}/proposal/view/${proposal.share_token}`;
 
-  try {
-    await sendProposalToClient({
-      recipientEmail,
-      recipientName: proposal.client?.contact_name || "",
-      proposalTitle: proposal.title,
-      businessName: profile?.business_name || user.email || "A business",
-      totalAmount: proposal.total_amount
-        ? formatCurrency(proposal.total_amount, proposal.currency)
-        : "See proposal",
-      shareUrl,
-      expiresAt: proposal.expires_at
-        ? new Date(proposal.expires_at).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })
-        : null,
-    });
+  const mailtoLink = generateProposalEmailMailto({
+    recipientEmail,
+    recipientName: proposal.client?.contact_name || "",
+    proposalTitle: proposal.title,
+    businessName: profile?.business_name || user.email || "A business",
+    totalAmount: proposal.total_amount
+      ? formatCurrency(proposal.total_amount, proposal.currency)
+      : "See proposal",
+    shareUrl,
+    expiresAt: proposal.expires_at
+      ? new Date(proposal.expires_at).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : null,
+  });
 
-    // Update status to "sent"
-    await serviceClient
-      .from("proposals")
-      .update({ status: "sent" })
-      .eq("id", id);
+  await serviceClient
+    .from("proposals")
+    .update({ status: "sent" })
+    .eq("id", id);
 
-    await serviceClient.from("proposal_activities").insert({
-      proposal_id: id,
-      type: "sent",
-      metadata: { recipient: recipientEmail },
-    });
+  await serviceClient.from("proposal_activities").insert({
+    proposal_id: id,
+    type: "sent",
+    metadata: { recipient: recipientEmail, mode: "mailto" },
+  });
 
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("Failed to send proposal email:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to send email" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({ success: true, mailtoLink });
 }

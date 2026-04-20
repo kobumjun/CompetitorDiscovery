@@ -148,7 +148,7 @@ export interface ExtractedLead {
 }
 
 export type OutreachType = "proposal" | "pitch" | "investment" | "quote";
-export type OutreachStatus = "draft" | "sent" | "failed";
+export type OutreachStatus = "draft" | "sent" | "failed" | "opened_in_client";
 
 export interface Outreach {
   id: string;

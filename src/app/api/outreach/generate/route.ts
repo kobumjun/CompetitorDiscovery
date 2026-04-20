@@ -73,39 +73,9 @@ export async function POST(request: NextRequest) {
         context: context || "",
       });
 
-      const outreachRows = recipientEmails.map((recipientEmail) => ({
-        lead_id: lead.id,
-        type,
-        recipient_email: recipientEmail,
-        subject: generated.subject,
-        body: generated.body,
-        status: "draft",
-      }));
-
-      const { data: outreaches, error: outreachError } = await serviceClient
-        .from("outreaches")
-        .insert(outreachRows)
-        .select("*");
-
-      if (outreachError) {
-        await addCredits(user.id, 1);
-        return NextResponse.json({ error: "Failed to save outreach drafts" }, { status: 500 });
-      }
-
-      const { error: leadUpdateError } = await serviceClient
-        .from("extracted_leads")
-        .update({ outreach_count: (lead.outreach_count ?? 0) + recipientEmails.length })
-        .eq("id", lead.id)
-        .eq("user_id", user.id);
-
-      if (leadUpdateError) {
-        console.warn("Failed to update outreach_count", leadUpdateError);
-      }
-
       return NextResponse.json({
         subject: generated.subject,
         body: generated.body,
-        outreaches: outreaches || [],
         remainingCredits: creditResult.remaining,
       });
     } catch (err) {

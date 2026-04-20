@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { formatCurrency } from "@/types";
 import type { ProposalContent } from "@/types";
 import { SignatureSection } from "./signature";
-import { sendProposalViewedNotification } from "@/lib/email";
 
 export default async function PublicProposalPage({
   params,
@@ -42,27 +41,6 @@ export default async function PublicProposalPage({
     proposal_id: proposal.id,
     type: "viewed",
   });
-
-  // Notify owner on first view
-  if (!proposal.first_viewed_at) {
-    try {
-      const ownerEmail = (proposal.user as any)?.email;
-      if (ownerEmail) {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-        await sendProposalViewedNotification({
-          ownerEmail,
-          proposalTitle: proposal.title,
-          viewedAt: new Date().toLocaleString("en-US", {
-            dateStyle: "long",
-            timeStyle: "short",
-          }),
-          proposalUrl: `${appUrl}/dashboard/proposals/${proposal.id}`,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to send view notification:", err);
-    }
-  }
 
   const content = proposal.content as ProposalContent;
   const currency = proposal.currency || "USD";

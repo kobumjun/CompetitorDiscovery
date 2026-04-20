@@ -231,7 +231,7 @@ export default function LandingPage() {
             {[
               { icon: Eye, title: "Auto Email Extraction", desc: "Scan website contact pages and extract usable business emails in one click." },
               { icon: Sparkles, title: "4 Outreach Types", desc: "Generate Proposals, Pitches, Investment outreach, and Quotes tailored to each lead." },
-              { icon: Send, title: "Send or Copy Instantly", desc: "Send via Resend directly from dashboard, or copy polished drafts to clipboard." },
+              { icon: Send, title: "Send or Copy Instantly", desc: "Open your own email client instantly or copy polished drafts to clipboard." },
               { icon: BarChart3, title: "Outreach Tracking", desc: "Track extracted leads and all outreach drafts/sent status in one place." },
               { icon: Users, title: "Client + Lead Workflow", desc: "Turn unknown websites into qualified contacts and active conversations quickly." },
               { icon: Shield, title: "Permission First", desc: "Built with a clear permission notice to avoid spam and keep outreach responsible." },

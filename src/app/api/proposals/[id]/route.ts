@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { sendProposalRejectedNotification } from "@/lib/email";
 
 export async function GET(
   _request: NextRequest,
@@ -51,26 +50,6 @@ export async function PATCH(
       proposal_id: id,
       type: "rejected",
     });
-
-    // Notify owner
-    try {
-      const { data: owner } = await serviceClient
-        .from("users")
-        .select("email")
-        .eq("id", proposal.user_id)
-        .single();
-
-      if (owner?.email) {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-        await sendProposalRejectedNotification({
-          ownerEmail: owner.email,
-          proposalTitle: proposal.title,
-          proposalUrl: `${appUrl}/dashboard/proposals/${proposal.id}`,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to send rejection notification:", err);
-    }
 
     return NextResponse.json({ status: "rejected" });
   }

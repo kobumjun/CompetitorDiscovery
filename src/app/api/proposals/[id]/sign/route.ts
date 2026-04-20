@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { sendProposalSignedNotification } from "@/lib/email";
 
 export async function POST(
   request: NextRequest,
@@ -48,32 +47,6 @@ export async function POST(
     type: "signed",
     metadata: { name, email },
   });
-
-  // Notify proposal owner via email
-  try {
-    const { data: owner } = await serviceClient
-      .from("users")
-      .select("email")
-      .eq("id", proposal.user_id)
-      .single();
-
-    if (owner?.email) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-      await sendProposalSignedNotification({
-        ownerEmail: owner.email,
-        proposalTitle: proposal.title,
-        signedByName: name,
-        signedByEmail: email,
-        signedAt: new Date(signedAt).toLocaleString("en-US", {
-          dateStyle: "long",
-          timeStyle: "short",
-        }),
-        proposalUrl: `${appUrl}/dashboard/proposals/${proposal.id}`,
-      });
-    }
-  } catch (err) {
-    console.error("Failed to send signed notification email:", err);
-  }
 
   return NextResponse.json({ success: true });
 }

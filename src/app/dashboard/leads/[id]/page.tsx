@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { ExtractedLead, ExtractedEmail, Outreach, OutreachType } from "@/types";
-import { ArrowLeft, Copy, ExternalLink, Mail, RefreshCw, Send } from "lucide-react";
+import type { ExtractedLead, ExtractedEmail, OutreachType } from "@/types";
+import { ArrowLeft, Copy, ExternalLink, Mail, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const OUTREACH_TYPES: { key: OutreachType; label: string }[] = [
@@ -25,10 +25,10 @@ export default function LeadDetailPage() {
   const [context, setContext] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [draftOutreachIds, setDraftOutreachIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [bccSelf, setBccSelf] = useState(true);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -51,6 +51,13 @@ export default function LeadDetailPage() {
   useEffect(() => {
     fetchLead().finally(() => setLoading(false));
   }, [leadId]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email || null);
+    });
+  }, []);
 
   function toggleEmail(email: string) {
     setSelectedEmails((prev) =>
@@ -83,7 +90,6 @@ export default function LeadDetailPage() {
 
       setSubject(payload.subject || "");
       setBody(payload.body || "");
-      setDraftOutreachIds((payload.outreaches || []).map((o: Outreach) => o.id));
       await fetchLead();
     } catch {
       setError("Unexpected error while generating outreach.");
@@ -92,40 +98,67 @@ export default function LeadDetailPage() {
     }
   }
 
-  async function sendEmail() {
-    if (!subject || !body || draftOutreachIds.length === 0) return;
-    setSending(true);
+  async function saveOutreachRecord() {
+    if (!lead || !subject || !body || selectedEmails.length === 0) return;
     setError(null);
-    setNotice(null);
     try {
-      const response = await fetch("/api/outreach/send", {
+      const response = await fetch("/api/outreach/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          outreachIds: draftOutreachIds,
+          leadId: lead.id,
+          type,
+          recipientEmails: selectedEmails,
           subject,
           body,
+          status: "opened_in_client",
         }),
       });
-      const payload = await response.json();
       if (!response.ok) {
-        setError(payload.error || "Failed to send outreach");
-        return;
+        const payload = await response.json();
+        setError(payload.error || "Failed to save outreach record.");
       }
-
-      const successCount = (payload.results || []).filter((r: { success: boolean }) => r.success).length;
-      setNotice(`Sent ${successCount}/${draftOutreachIds.length} emails.`);
+      await fetchLead();
     } catch {
-      setError("Unexpected error while sending outreach.");
-    } finally {
-      setSending(false);
+      // keep silent in UI to avoid blocking mailto flow
     }
+  }
+
+  function withSignature(content: string) {
+    const signature = userEmail ? `\n\n---\n${userEmail}` : "";
+    return `${content}${signature}`;
+  }
+
+  function openInEmailClient() {
+    if (!subject || !body || selectedEmails.length === 0) return;
+    const recipients = selectedEmails.join(",");
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(withSignature(body));
+    const bcc = bccSelf && userEmail ? `&bcc=${encodeURIComponent(userEmail)}` : "";
+    const mailtoLink = `mailto:${recipients}?subject=${encodedSubject}&body=${encodedBody}${bcc}`;
+    window.location.href = mailtoLink;
+    setNotice("Opened your default email client.");
+    void saveOutreachRecord();
+  }
+
+  function openInGmail() {
+    if (!subject || !body || selectedEmails.length === 0) return;
+    const recipients = selectedEmails.join(",");
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(withSignature(body));
+    const bcc = bccSelf && userEmail ? `&bcc=${encodeURIComponent(userEmail)}` : "";
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipients)}&su=${encodedSubject}&body=${encodedBody}${bcc}`;
+    window.open(gmailUrl, "_blank");
+    setNotice("Opened Gmail compose in a new tab.");
+    void saveOutreachRecord();
   }
 
   async function copyToClipboard() {
     try {
-      await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
-      setNotice("Copied to clipboard.");
+      const fullEmail = `To: ${selectedEmails.join(", ")}\nSubject: ${subject}\n\n${withSignature(body)}`;
+      await navigator.clipboard.writeText(fullEmail);
+      setNotice("Email copied to clipboard.");
+      void saveOutreachRecord();
     } catch {
       setError("Clipboard copy failed.");
     }
@@ -252,13 +285,40 @@ export default function LeadDetailPage() {
               <button onClick={generateEmail} className="btn-secondary" disabled={generating}>
                 <RefreshCw className="w-4 h-4" /> Regenerate
               </button>
-              <button onClick={copyToClipboard} className="btn-secondary">
-                <Copy className="w-4 h-4" /> Copy
+              <button
+                onClick={openInEmailClient}
+                className="btn-primary"
+                disabled={!subject || !body || selectedEmails.length === 0}
+              >
+                Open in Email Client
               </button>
-              <button onClick={sendEmail} className="btn-primary" disabled={sending || draftOutreachIds.length === 0}>
-                <Send className="w-4 h-4" /> {sending ? "Sending..." : "Send via Email"}
+              <button
+                onClick={openInGmail}
+                className="btn-secondary"
+                disabled={!subject || !body || selectedEmails.length === 0}
+              >
+                Open in Gmail (Web)
+              </button>
+              <button onClick={copyToClipboard} className="btn-secondary">
+                <Copy className="w-4 h-4" /> Copy Email
               </button>
             </div>
+            <label className="flex items-center gap-2 text-sm text-ink-600">
+              <input
+                type="checkbox"
+                checked={bccSelf}
+                onChange={(e) => setBccSelf(e.target.checked)}
+              />
+              Also send a copy to myself (BCC)
+            </label>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              This opens your email client with everything pre-filled. The email sends from your address, so replies come directly to your inbox.
+            </div>
+            {subject.length + body.length > 1800 && (
+              <div className="text-xs text-amber-700">
+                This email is long. If it looks cut off in your email client, use "Copy Email" instead.
+              </div>
+            )}
           </div>
         )}
 
