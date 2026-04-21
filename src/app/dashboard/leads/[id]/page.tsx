@@ -22,6 +22,7 @@ export default function LeadDetailPage() {
   const [lead, setLead] = useState<ExtractedLead | null>(null);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [type, setType] = useState<OutreachType>("proposal");
+  const [writeMode, setWriteMode] = useState<"ai" | "manual">("ai");
   const [context, setContext] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -255,40 +256,72 @@ export default function LeadDetailPage() {
           ))}
         </div>
 
-        <textarea
-          className="input-field min-h-28"
-          placeholder="Specific context for this outreach..."
-          value={context}
-          onChange={(e) => setContext(e.target.value)}
-        />
-
-        {!subject && !body ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button
-            onClick={generateEmail}
-            disabled={generating || selectedEmails.length === 0}
-            className="btn-primary"
+            onClick={() => setWriteMode("ai")}
+            className={cn(
+              "btn-secondary justify-center",
+              writeMode === "ai" && "bg-brand-50 border-brand-300 text-brand-700"
+            )}
           >
-            <Mail className="w-4 h-4" />
-            {generating ? "Generating..." : "Generate Email with AI (1 credit)"}
+            ✨ Generate with AI
           </button>
-        ) : (
-          <div className="space-y-3">
+          <button
+            onClick={() => setWriteMode("manual")}
+            className={cn(
+              "btn-secondary justify-center",
+              writeMode === "manual" && "bg-brand-50 border-brand-300 text-brand-700"
+            )}
+          >
+            ✍️ Write it myself
+          </button>
+        </div>
+
+        {writeMode === "ai" && (
+          <>
+            <textarea
+              className="input-field min-h-28"
+              placeholder="Specific context for this outreach..."
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+            />
+            <button
+              onClick={generateEmail}
+              disabled={generating || selectedEmails.length === 0}
+              className="btn-primary"
+            >
+              <Mail className="w-4 h-4" />
+              {generating ? "Generating..." : "Generate Email with AI (1 credit)"}
+            </button>
+          </>
+        )}
+
+        {writeMode === "manual" && (
+          <>
             <input
               className="input-field"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Subject"
+              placeholder="Email subject line"
             />
             <textarea
               className="input-field min-h-64"
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="Body"
+              placeholder="Write your email here..."
             />
+            <p className="text-xs text-ink-400">No credits used when writing manually.</p>
+          </>
+        )}
+
+        {subject && body && (
+          <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <button onClick={generateEmail} className="btn-secondary" disabled={generating}>
-                <RefreshCw className="w-4 h-4" /> Regenerate
-              </button>
+              {writeMode === "ai" && (
+                <button onClick={generateEmail} className="btn-secondary" disabled={generating}>
+                  <RefreshCw className="w-4 h-4" /> Regenerate
+                </button>
+              )}
               <button
                 onClick={openInEmailClient}
                 className="btn-primary"

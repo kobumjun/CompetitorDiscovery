@@ -47,6 +47,8 @@ export default function NewProposalPage() {
   const [sections, setSections] = useState<string[]>([...SECTIONS]);
   const [tone, setTone] = useState<ProposalTone>("professional");
   const [additionalInstructions, setAdditionalInstructions] = useState("");
+  const [proposalMode, setProposalMode] = useState<"ai" | "manual">("ai");
+  const [manualContent, setManualContent] = useState("");
 
   useEffect(() => {
     async function fetchData() {
@@ -118,6 +120,8 @@ export default function NewProposalPage() {
           sections,
           tone,
           additionalInstructions: additionalInstructions || null,
+          isManual: proposalMode === "manual",
+          manualContent: proposalMode === "manual" ? manualContent : null,
         }),
       });
 
@@ -311,12 +315,55 @@ export default function NewProposalPage() {
             <Row label="Sections" value={sections.join(", ")} />
           </div>
 
-          <div className="card p-4 bg-brand-50 border-brand-200">
-            <p className="text-sm text-brand-800">
-              This will use <strong>1 credit</strong>. You have{" "}
-              <strong>{credits}</strong> credit{credits !== 1 ? "s" : ""} remaining.
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={() => setProposalMode("ai")}
+              className={cn(
+                "text-left rounded-lg border p-4",
+                proposalMode === "ai"
+                  ? "border-brand-300 bg-brand-50"
+                  : "border-surface-200 bg-white"
+              )}
+            >
+              <div className="font-semibold text-ink-900">✨ AI Generate</div>
+              <p className="text-xs text-ink-500 mt-1">
+                AI writes the full proposal from project details. Uses 1 credit.
+              </p>
+            </button>
+            <button
+              onClick={() => setProposalMode("manual")}
+              className={cn(
+                "text-left rounded-lg border p-4",
+                proposalMode === "manual"
+                  ? "border-brand-300 bg-brand-50"
+                  : "border-surface-200 bg-white"
+              )}
+            >
+              <div className="font-semibold text-ink-900">✍️ Write Manually</div>
+              <p className="text-xs text-ink-500 mt-1">
+                Write your own proposal from scratch. No credits used.
+              </p>
+            </button>
           </div>
+
+          {proposalMode === "ai" ? (
+            <div className="card p-4 bg-brand-50 border-brand-200">
+              <p className="text-sm text-brand-800">
+                This will use <strong>1 credit</strong>. You have{" "}
+                <strong>{credits}</strong> credit{credits !== 1 ? "s" : ""} remaining.
+              </p>
+            </div>
+          ) : (
+            <div className="card p-4">
+              <textarea
+                className="input-field min-h-[320px]"
+                value={manualContent}
+                onChange={(e) => setManualContent(e.target.value)}
+                placeholder={"Write your proposal here...\n\nInclude:\n- Project overview\n- Scope of work\n- Timeline\n- Pricing\n- Terms and conditions"}
+              />
+              <p className="text-xs text-ink-400 mt-2">No credits used in manual mode.</p>
+            </div>
+          )}
 
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -331,7 +378,7 @@ export default function NewProposalPage() {
             </button>
             <button
               onClick={handleGenerate}
-              disabled={loading || credits < 1}
+              disabled={loading || (proposalMode === "ai" ? credits < 1 : !manualContent.trim())}
               className="btn-primary flex-1"
             >
               {loading ? (
@@ -340,7 +387,8 @@ export default function NewProposalPage() {
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" /> Generate Proposal
+                  {proposalMode === "ai" ? <Sparkles className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  {proposalMode === "ai" ? "Generate Proposal" : "Save Manual Proposal"}
                 </>
               )}
             </button>

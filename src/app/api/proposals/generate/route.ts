@@ -29,20 +29,14 @@ export async function POST(request: NextRequest) {
       sections,
       tone,
       additionalInstructions,
+      isManual,
+      manualContent,
     } = body;
 
     if (!projectName || !projectDescription) {
       return NextResponse.json(
         { error: "Project name and description are required" },
         { status: 400 }
-      );
-    }
-
-    const creditResult = await deductCredits(user.id, 1);
-    if (!creditResult.success) {
-      return NextResponse.json(
-        { error: "Insufficient credits. Upgrade your plan to continue.", credits: creditResult.remaining },
-        { status: 402 }
       );
     }
 
@@ -58,6 +52,66 @@ export async function POST(request: NextRequest) {
     const language = (profile as BusinessProfile | null)?.language || "en";
 
     try {
+      if (isManual) {
+        if (!manualContent || typeof manualContent !== "string") {
+          return NextResponse.json({ error: "Manual proposal content is required" }, { status: 400 });
+        }
+
+        const content = {
+          coverLetter: manualContent,
+          scope: [],
+          deliverables: [],
+          timeline: [],
+          pricing: [],
+          totalAmount: budget || 0,
+          terms: "",
+          nextSteps: "",
+        };
+
+        const { data: proposal, error: insertError } = await serviceClient
+          .from("proposals")
+          .insert({
+            user_id: user.id,
+            client_id: clientId || null,
+            title: `${projectName} Proposal`,
+            project_name: projectName,
+            project_description: projectDescription,
+            estimated_budget: budget || null,
+            estimated_timeline: timeline || null,
+            content,
+            currency,
+            total_amount: budget || null,
+            expires_at: new Date(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+          })
+          .select()
+          .single();
+
+        if (insertError || !proposal) {
+          return NextResponse.json(
+            { error: "Failed to save proposal" },
+            { status: 500 }
+          );
+        }
+
+        await serviceClient.from("proposal_activities").insert({
+          proposal_id: proposal.id,
+          type: "created",
+          metadata: { mode: "manual" },
+        });
+
+        return NextResponse.json({ proposal });
+      }
+
+      const creditResult = await deductCredits(user.id, 1);
+      if (!creditResult.success) {
+        return NextResponse.json(
+          { error: "Insufficient credits. Upgrade your plan to continue.", credits: creditResult.remaining },
+          { status: 402 }
+        );
+      }
+
       const content = await generateProposal({
         profile: profile as BusinessProfile | null,
         clientName: clientName || "",

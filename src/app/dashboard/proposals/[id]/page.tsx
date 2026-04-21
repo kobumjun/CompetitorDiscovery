@@ -191,7 +191,7 @@ export default function ProposalEditorPage() {
         </Link>
         {(proposal.status === "draft" || proposal.status === "sent") && (
           <button onClick={() => { setSendEmail((proposal.client as any)?.email || ""); setShowSendDialog(true); }} className="btn-primary text-sm">
-            <Send className="w-4 h-4" /> Send to Client
+            <Send className="w-4 h-4" /> Send to Client via Email
           </button>
         )}
         <button onClick={handleDelete} className="btn-ghost text-sm text-red-600 hover:bg-red-50">
