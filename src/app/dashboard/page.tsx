@@ -8,9 +8,9 @@ import {
   FileText,
   Send,
   Target,
+  List,
   CheckCircle2,
   TrendingUp,
-  Plus,
   ArrowRight,
   Clock,
   Sparkles,
@@ -101,24 +101,9 @@ export default function DashboardPage() {
         <p className="text-ink-500 mt-1">Your proposal command center</p>
       </div>
 
-      {!loading && !hasProfile && (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
         <Link
-          href="/dashboard/settings"
-          className="card mb-6 flex flex-col gap-3 border-brand-200 bg-brand-50 p-4 transition-colors hover:bg-brand-100 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="flex min-w-0 items-start gap-3 sm:items-center">
-            <Sparkles className="w-5 h-5 text-brand-600" />
-            <span className="text-sm text-brand-800 font-medium">
-              Set up your business profile for personalized proposals
-            </span>
-          </div>
-          <ArrowRight className="hidden h-4 w-4 flex-shrink-0 text-brand-600 sm:block" />
-        </Link>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
-        <Link
-          href="/dashboard/leads"
+          href="/dashboard/find-contacts"
           className="card-hover p-5 border-brand-200 bg-brand-50"
         >
           <div className="flex items-center justify-between">
@@ -128,7 +113,21 @@ export default function DashboardPage() {
             </div>
             <ArrowRight className="w-4 h-4 text-brand-600" />
           </div>
-          <p className="text-sm text-ink-600 mt-2">Paste any website URL to extract emails and start outreach.</p>
+          <p className="text-sm text-ink-600 mt-2">Paste a URL to extract contact emails</p>
+        </Link>
+        <Link
+          href="/dashboard/find-contacts?mode=bulk"
+          className="card-hover p-5"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <List className="w-5 h-5 text-ink-700" />
+              <h3 className="text-base font-bold text-ink-900">Bulk Discovery</h3>
+              <span className="badge bg-brand-50 text-brand-700">NEW</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-ink-400" />
+          </div>
+          <p className="text-sm text-ink-500 mt-2">Extract emails from multiple sites at once</p>
         </Link>
         <Link
           href="/dashboard/proposals/new"
@@ -141,7 +140,7 @@ export default function DashboardPage() {
             </div>
             <ArrowRight className="w-4 h-4 text-ink-400" />
           </div>
-          <p className="text-sm text-ink-500 mt-2">Generate a full project proposal with timeline and pricing.</p>
+          <p className="text-sm text-ink-500 mt-2">Generate a full project proposal with timeline and pricing</p>
         </Link>
       </div>
 

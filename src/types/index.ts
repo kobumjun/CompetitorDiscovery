@@ -46,6 +46,8 @@ export interface Client {
   website: string | null;
   address: string | null;
   notes: string | null;
+  source_url: string | null;
+  status: string;
   created_at: string;
   updated_at: string;
 }

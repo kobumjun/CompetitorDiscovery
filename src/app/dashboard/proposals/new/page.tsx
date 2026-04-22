@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -28,6 +28,7 @@ const SECTIONS = [
 
 export default function NewProposalPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -74,6 +75,15 @@ export default function NewProposalPage() {
     }
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const prefClient = searchParams.get("client");
+    const prefEmail = searchParams.get("email");
+    const prefCompany = searchParams.get("company");
+    if (prefClient) setClientId(prefClient);
+    if (prefEmail) setNewClientEmail(prefEmail);
+    if (prefCompany) setNewClientName(prefCompany);
+  }, [searchParams]);
 
   function toggleSection(s: string) {
     setSections((prev) =>

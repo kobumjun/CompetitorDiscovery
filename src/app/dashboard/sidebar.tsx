@@ -22,7 +22,7 @@ import { SiteFooter } from "@/components/site-footer";
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
   { href: "/dashboard/proposals", icon: FileText, label: "Proposals", exact: false },
-  { href: "/dashboard/leads", icon: Target, label: "Find Contacts", exact: false },
+  { href: "/dashboard/find-contacts", icon: Target, label: "Find Contacts", exact: false },
   { href: "/dashboard/clients", icon: Users, label: "Clients", exact: false },
   { href: "/dashboard/settings", icon: Settings, label: "Settings", exact: false },
 ];
