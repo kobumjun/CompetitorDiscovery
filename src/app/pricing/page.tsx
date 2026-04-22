@@ -1,12 +1,17 @@
-"use client";
-
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Rocket, Check, Zap, Shield, RefreshCcw, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PLANS } from "@/types";
 import { PlanCheckoutButton } from "@/components/plan-checkout-button";
 import type { PaidPlan } from "@/lib/lemonsqueezy";
 import { SiteFooter } from "@/components/site-footer";
+
+export const metadata: Metadata = {
+  title: "Pricing",
+  description:
+    "ProposalPilot pricing plans. Start free with 5 credits. Pro plan $19/month, Agency plan $49/month.",
+};
 
 const FAQS = [
   {
