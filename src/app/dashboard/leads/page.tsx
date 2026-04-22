@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import type { ExtractedLead } from "@/types";
-import { ChevronDown, Copy, Download, Globe, Grid3X3, Mail, Plus, Sparkles } from "lucide-react";
-import { formatRelativeTime } from "@/lib/utils";
+import type { ExtractedLead, OutreachType } from "@/types";
+import { ChevronDown, ChevronRight, Copy, Download, Globe, Grid3X3, Mail, Plus, Sparkles } from "lucide-react";
+import { cn, formatRelativeTime } from "@/lib/utils";
 
 type BulkLeadResult = {
   email: string;
@@ -30,6 +30,13 @@ type BulkResponse = {
   message?: string;
 };
 
+const OUTREACH_TYPES: { key: OutreachType; label: string }[] = [
+  { key: "proposal", label: "Proposal" },
+  { key: "pitch", label: "Sales Pitch" },
+  { key: "investment", label: "Investment Ask" },
+  { key: "quote", label: "Quote" },
+];
+
 export default function LeadsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -48,6 +55,16 @@ export default function LeadsPage() {
   const [bulkResult, setBulkResult] = useState<BulkResponse | null>(null);
   const [failedOpen, setFailedOpen] = useState(false);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
+  const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
+  const [bulkOutreachType, setBulkOutreachType] = useState<OutreachType>("proposal");
+  const [bulkWriteMode, setBulkWriteMode] = useState<"ai" | "manual">("manual");
+  const [bulkContext, setBulkContext] = useState("");
+  const [bulkSubject, setBulkSubject] = useState("");
+  const [bulkBody, setBulkBody] = useState("");
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkActionError, setBulkActionError] = useState<string | null>(null);
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const progressSteps = [
     "Fetching website...",
     "Analyzing company...",
@@ -77,6 +94,13 @@ export default function LeadsPage() {
 
   useEffect(() => {
     fetchLeads().finally(() => setBootLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email || null);
+    });
   }, []);
 
   useEffect(() => {
@@ -188,6 +212,96 @@ export default function LeadsPage() {
       else next.add(email);
       return next;
     });
+  }
+
+  function getRowKey(row: BulkLeadResult) {
+    return `${row.lead_id}:${row.email}`;
+  }
+
+  function expandRow(row: BulkLeadResult, preselect?: "ai" | "manual") {
+    const key = getRowKey(row);
+    if (expandedRowKey === key && !preselect) {
+      setExpandedRowKey(null);
+      return;
+    }
+    setExpandedRowKey(key);
+    setBulkWriteMode(preselect ?? "manual");
+    setBulkContext("");
+    setBulkSubject("");
+    setBulkBody("");
+    setBulkActionError(null);
+    setBulkNotice(null);
+  }
+
+  function withSignature(content: string) {
+    const signature = userEmail ? `\n\n---\n${userEmail}` : "";
+    return `${content}${signature}`;
+  }
+
+  async function saveBulkOutreachRecord(row: BulkLeadResult, subject: string, body: string) {
+    try {
+      await fetch("/api/outreach/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: row.lead_id,
+          type: bulkOutreachType,
+          recipientEmails: [row.email],
+          subject,
+          body,
+          status: "opened_in_client",
+        }),
+      });
+    } catch {
+      // keep silent so mail flow is never blocked
+    }
+  }
+
+  function openRowMailto(row: BulkLeadResult, subject: string, body: string) {
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(withSignature(body));
+    const mailtoLink = `mailto:${encodeURIComponent(row.email)}?subject=${encodedSubject}&body=${encodedBody}`;
+    window.location.href = mailtoLink;
+    setBulkNotice("Opened your default email client.");
+    void saveBulkOutreachRecord(row, subject, body);
+  }
+
+  async function handleGenerateBulkAi(row: BulkLeadResult) {
+    setBulkGenerating(true);
+    setBulkActionError(null);
+    setBulkNotice(null);
+    try {
+      const response = await fetch("/api/outreach/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: row.lead_id,
+          type: bulkOutreachType,
+          context: bulkContext,
+          recipientEmails: [row.email],
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setBulkActionError(payload.error || "Failed to generate outreach");
+        return;
+      }
+      const generatedSubject = payload.subject || "";
+      const generatedBody = payload.body || "";
+      setBulkSubject(generatedSubject);
+      setBulkBody(generatedBody);
+      openRowMailto(row, generatedSubject, generatedBody);
+      await fetchLeads();
+    } catch {
+      setBulkActionError("Unexpected error while generating outreach.");
+    } finally {
+      setBulkGenerating(false);
+    }
+  }
+
+  function handleOpenManual(row: BulkLeadResult) {
+    if (!bulkSubject.trim() || !bulkBody.trim()) return;
+    openRowMailto(row, bulkSubject.trim(), bulkBody.trim());
   }
 
   function handleDownloadCsv() {
@@ -341,48 +455,177 @@ export default function LeadsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {bulkResult.leads.map((row) => (
-                      <tr key={`${row.email}-${row.lead_id}`} className="border-b border-surface-100">
-                        <td className="py-2 pr-2">
-                          <input
-                            type="checkbox"
-                            checked={selectedEmails.has(row.email)}
-                            onChange={() => toggleRow(row.email)}
-                          />
-                        </td>
-                        <td className="py-2 pr-2 text-ink-800">{row.email}</td>
-                        <td className="py-2 pr-2 text-ink-700">{row.company_name}</td>
-                        <td className="py-2 pr-2">
-                          <a className="text-brand-600 hover:underline" href={row.source_url} target="_blank" rel="noreferrer">
-                            {row.source_url}
-                          </a>
-                        </td>
-                        <td className="py-2">
-                          <div className="flex items-center gap-1">
-                            <Link
-                              href={`/dashboard/proposals/new?client=${row.client_id}&email=${encodeURIComponent(row.email)}&company=${encodeURIComponent(row.company_name)}`}
-                              className="btn-ghost text-xs"
-                            >
-                              Generate Proposal
-                            </Link>
-                            <button
-                              className="p-1.5 text-ink-500 hover:text-ink-700"
-                              onClick={() => navigator.clipboard.writeText(row.email)}
-                              title="Copy Email"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                            <a
-                              href={`mailto:${row.email}`}
-                              className="p-1.5 text-ink-500 hover:text-ink-700"
-                              title="Open in Mail"
-                            >
-                              <Mail className="w-4 h-4" />
-                            </a>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {bulkResult.leads.map((row) => {
+                      const rowKey = getRowKey(row);
+                      const expanded = expandedRowKey === rowKey;
+                      return (
+                        <Fragment key={rowKey}>
+                          <tr
+                            className={cn("border-b border-surface-100 cursor-pointer", expanded && "bg-gray-50")}
+                            onClick={() => expandRow(row)}
+                          >
+                            <td className="py-2 pr-2">
+                              <div className="flex items-center gap-2">
+                                {expanded ? <ChevronDown className="w-4 h-4 text-ink-500" /> : <ChevronRight className="w-4 h-4 text-ink-500" />}
+                                <input
+                                  type="checkbox"
+                                  checked={selectedEmails.has(row.email)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={() => toggleRow(row.email)}
+                                />
+                              </div>
+                            </td>
+                            <td className="py-2 pr-2 text-ink-800">{row.email}</td>
+                            <td className="py-2 pr-2 text-ink-700">{row.company_name}</td>
+                            <td className="py-2 pr-2">
+                              <a
+                                className="text-brand-600 hover:underline"
+                                href={row.source_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {row.source_url}
+                              </a>
+                            </td>
+                            <td className="py-2">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  className="btn-ghost text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    expandRow(row, "ai");
+                                  }}
+                                >
+                                  Generate Proposal
+                                </button>
+                                <button
+                                  className="p-1.5 text-ink-500 hover:text-ink-700"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void navigator.clipboard.writeText(row.email);
+                                  }}
+                                  title="Copy Email"
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </button>
+                                <a
+                                  href={`mailto:${row.email}`}
+                                  className="p-1.5 text-ink-500 hover:text-ink-700"
+                                  title="Open in Mail"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Mail className="w-4 h-4" />
+                                </a>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr className="bg-gray-50 border-b border-surface-100">
+                            <td colSpan={5} className="p-0">
+                              <div
+                                className={cn(
+                                  "overflow-hidden transition-all duration-200",
+                                  expanded ? "max-h-[560px] border-t border-surface-200" : "max-h-0"
+                                )}
+                              >
+                                <div className="p-4 sm:p-5">
+                                  <div className="text-xs text-ink-600 mb-3">
+                                    {row.email} | {row.company_name} | {row.source_url}
+                                  </div>
+
+                                  <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
+                                    <div className="text-sm font-medium text-ink-800">Choose proposal type:</div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                      {OUTREACH_TYPES.map((item) => (
+                                        <button
+                                          key={item.key}
+                                          type="button"
+                                          onClick={() => setBulkOutreachType(item.key)}
+                                          className={cn(
+                                            "btn-secondary text-xs justify-center",
+                                            bulkOutreachType === item.key && "bg-brand-50 border-brand-300 text-brand-700"
+                                          )}
+                                        >
+                                          {item.label}
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => setBulkWriteMode("manual")}
+                                        className={cn(
+                                          "btn-secondary justify-center",
+                                          bulkWriteMode === "manual" && "bg-brand-50 border-brand-300 text-brand-700"
+                                        )}
+                                      >
+                                        ✍️ Write manually (free)
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setBulkWriteMode("ai")}
+                                        className={cn(
+                                          "btn-secondary justify-center",
+                                          bulkWriteMode === "ai" && "bg-brand-50 border-brand-300 text-brand-700"
+                                        )}
+                                      >
+                                        ✨ Generate with AI (1 credit)
+                                      </button>
+                                    </div>
+
+                                    {bulkWriteMode === "ai" ? (
+                                      <div className="space-y-2">
+                                        <textarea
+                                          className="input-field min-h-24"
+                                          value={bulkContext}
+                                          onChange={(e) => setBulkContext(e.target.value)}
+                                          placeholder="Specific context for this outreach..."
+                                        />
+                                        <button
+                                          className="btn-primary"
+                                          onClick={() => handleGenerateBulkAi(row)}
+                                          disabled={bulkGenerating}
+                                        >
+                                          <Sparkles className="w-4 h-4" />
+                                          {bulkGenerating ? "Generating..." : "Generate & Open Mail"}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        <input
+                                          className="input-field"
+                                          value={bulkSubject}
+                                          onChange={(e) => setBulkSubject(e.target.value)}
+                                          placeholder="Email subject line"
+                                        />
+                                        <textarea
+                                          className="input-field min-h-36"
+                                          value={bulkBody}
+                                          onChange={(e) => setBulkBody(e.target.value)}
+                                          placeholder="Write your email here..."
+                                        />
+                                        <button
+                                          className="btn-primary"
+                                          onClick={() => handleOpenManual(row)}
+                                          disabled={!bulkSubject.trim() || !bulkBody.trim()}
+                                        >
+                                          <Mail className="w-4 h-4" />
+                                          Open in Mail
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {bulkActionError && <p className="text-sm text-red-600">{bulkActionError}</p>}
+                                    {bulkNotice && <p className="text-sm text-emerald-700">{bulkNotice}</p>}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
