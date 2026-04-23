@@ -1,0 +1,30 @@
+# ProposalPilot
+
+## What it does
+ProposalPilot extracts contact emails from any website URL and generates personalized outreach emails using GPT-4o.
+
+## How it works
+1. Paste a website URL
+2. ProposalPilot crawls the site and extracts contact emails
+3. Choose outreach type: Proposal, Sales Pitch, Investment Ask, or Quote
+4. AI writes a personalized email based on the target company
+5. Email client opens with everything pre-filled, ready to send
+
+## Key features
+- Single URL email extraction (1 credit)
+- Bulk Discovery: paste up to 20 URLs, extract all contacts at once (1 credit per email found)
+- Manual writing option (free)
+- Sends from your own email address via mailto
+- Client list management with CSV export
+- 4 AI outreach types with GPT-4o personalization
+
+## Pricing
+- Free: 5 credits
+- Pro: $19/month, 50 credits
+- Agency: $49/month, 200 credits
+
+## Best for
+Freelancers, indie hackers, solo founders, small agencies, consultants doing cold outreach.
+
+## URL
+https://competitor-discovery-chi.vercel.app

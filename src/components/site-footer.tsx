@@ -25,15 +25,28 @@ export function SiteFooter({ variant = "default" }: Props) {
 
   return (
     <div className="border-t border-surface-200 bg-white">
-      <div className="max-w-6xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <p className="text-sm text-ink-400 order-2 sm:order-1">
+      <div className="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+        <p className="text-sm text-ink-400">
           &copy; {new Date().getFullYear()} ProposalPilot
         </p>
-        <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 order-1 sm:order-2">
-          <Link href="/terms" className={link}>Terms of Service</Link>
-          <Link href="/refund-policy" className={link}>Refund Policy</Link>
-          <Link href="/contact" className={link}>Contact</Link>
-        </nav>
+        <div className="grid grid-cols-2 gap-x-10 gap-y-3">
+          <div>
+            <p className="text-sm font-semibold text-ink-800 mb-2">Legal</p>
+            <nav className="flex flex-col gap-2">
+              <Link href="/terms" className={link}>Terms of Service</Link>
+              <Link href="/refund-policy" className={link}>Refund Policy</Link>
+              <Link href="/contact" className={link}>Contact</Link>
+            </nav>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-ink-800 mb-2">Resources</p>
+            <nav className="flex flex-col gap-2">
+              <Link href="/faq" className={link}>FAQ</Link>
+              <Link href="/what-is-proposalpilot" className={link}>What is ProposalPilot?</Link>
+              <Link href="/compare" className={link}>Compare</Link>
+            </nav>
+          </div>
+        </div>
       </div>
     </div>
   );
