@@ -47,7 +47,7 @@ const faqSchema = {
       name: "How is ProposalPilot different from Apollo, Hunter, or Clay?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Apollo, Hunter, and Clay are large-scale lead databases with millions of pre-indexed contacts. ProposalPilot takes a different approach — it extracts emails in real-time from any website you give it, then generates a personalized outreach email in the same flow. It's designed for freelancers, solo founders, and small teams who want to go from \"I found a company I like\" to \"outreach sent\" in under a minute, without needing a massive lead database subscription.",
+        text: "Those tools are built around pre-existing lead databases or enrichment workflows designed for sales teams. ProposalPilot is different — you start with a website you already found, extract the contact email from that site in real-time, and generate a personalized pitch in the same flow. It's built for people who do their own outreach manually and want to move faster, not for teams managing large sales pipelines.",
       },
     },
     {

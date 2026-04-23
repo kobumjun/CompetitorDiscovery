@@ -40,8 +40,8 @@ export default function WhatIsProposalPilotPage() {
         <header className="space-y-4">
           <h1 className="text-display font-black text-ink-900">What is ProposalPilot?</h1>
           <p className="text-lg text-ink-600 leading-relaxed">
-            ProposalPilot extracts contact emails from any website and generates personalized
-            outreach using AI.
+            ProposalPilot turns any website into an outreach opportunity — extract the contact
+            email and generate a personalized pitch in under 60 seconds.
           </p>
         </header>
 
@@ -72,10 +72,12 @@ export default function WhatIsProposalPilotPage() {
         <section className="grid gap-6 md:grid-cols-2">
           <div className="card p-7">
             <h2 className="text-heading font-bold text-ink-900 mb-3">Who it&apos;s for</h2>
-            <p className="text-sm text-ink-600 leading-relaxed">
-              Freelancers, indie hackers, small agencies, solo founders, consultants — anyone who
-              does cold outreach but doesn&apos;t need a $200/month enterprise lead database.
-            </p>
+            <ul className="space-y-2 text-sm text-ink-600 leading-relaxed list-disc list-inside">
+              <li>SEO outreach specialists building backlinks</li>
+              <li>Freelancers pitching potential clients they found online</li>
+              <li>Solo founders doing cold outreach to partners or investors</li>
+              <li>Small agencies prospecting new clients</li>
+            </ul>
           </div>
           <div className="card p-7">
             <h2 className="text-heading font-bold text-ink-900 mb-3">Pricing summary</h2>

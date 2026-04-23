@@ -47,11 +47,11 @@ const softwareApplicationSchema = {
 
 export const metadata: Metadata = {
   title: {
-    default: "ProposalPilot — Extract Emails & Send AI-Powered Outreach",
+    default: "ProposalPilot — Extract Emails & Send AI-Powered Outreach in 60 Seconds",
     template: "%s | ProposalPilot",
   },
   description:
-    "Paste any website URL, extract contact emails automatically, and send personalized proposals, pitches, and investment asks using AI. Under 60 seconds.",
+    "Paste any website URL, extract the contact email, and generate a personalized pitch with AI. Built for freelancers, founders, and anyone who does their own outreach.",
   keywords: [
     "cold outreach",
     "email extraction",
@@ -68,15 +68,15 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://competitor-discovery-chi.vercel.app",
     siteName: "ProposalPilot",
-    title: "ProposalPilot — Extract Emails & Send AI-Powered Outreach",
+    title: "ProposalPilot — Extract Emails & Send AI-Powered Outreach in 60 Seconds",
     description:
-      "Paste any website URL, extract contact emails, and send personalized proposals, pitches, and investment asks using AI. Under 60 seconds.",
+      "Paste any website URL, extract the contact email, and generate a personalized pitch with AI. Built for freelancers, founders, and anyone who does their own outreach.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ProposalPilot — Extract Emails & Send AI-Powered Outreach",
+    title: "ProposalPilot — Extract Emails & Send AI-Powered Outreach in 60 Seconds",
     description:
-      "Paste any website URL, extract contact emails, and send personalized outreach using AI.",
+      "Paste any website URL, extract the contact email, and generate a personalized pitch with AI.",
   },
   robots: {
     index: true,

@@ -5,7 +5,6 @@ import {
   Rocket,
   ArrowRight,
   Sparkles,
-  Clock,
   FileText,
   PenTool,
   Eye,
@@ -15,7 +14,6 @@ import {
   Zap,
   BarChart3,
   Shield,
-  RefreshCcw,
 } from "lucide-react";
 import { PLANS } from "@/types";
 import { PlanCheckoutButton } from "@/components/plan-checkout-button";
@@ -54,16 +52,15 @@ export default function LandingPage() {
             Website to outreach automation
           </div>
           <h1 className="text-display-xl font-black text-ink-900 mb-6 leading-tight">
-            From Website to{" "}
-            <span className="gradient-text">Closed Deal</span> in Minutes
+            Found a company you want to reach? Get their email and pitch them in 60 seconds.
           </h1>
           <p className="text-lg md:text-xl text-ink-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Extract contacts from any website. Generate personalized proposals, pitches,
-            and outreach emails. All in one tool.
+            Paste the URL. ProposalPilot extracts the contact email and writes a personalized pitch
+            based on what they actually do. Your email client opens ready to send.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
             <Link href="/signup" className="btn-primary text-base px-8 py-3">
-              Start Free - Try It Now
+              Try it free
               <ArrowRight className="w-5 h-5" />
             </Link>
             <a href="#how-it-works" className="btn-secondary text-base px-6 py-3">
@@ -74,14 +71,23 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Bulk Discovery */}
       <section className="py-10 border-y border-surface-200 bg-surface-50">
         <div className="max-w-4xl mx-auto px-6">
+          <div className="text-center mb-8">
+            <h2 className="text-heading font-bold text-ink-900 mb-2">
+              Got a list? Extract them all at once.
+            </h2>
+            <p className="text-sm text-ink-500 max-w-2xl mx-auto">
+              Paste up to 20 URLs. ProposalPilot crawls every site, extracts all contact emails,
+              and lets you generate a personalized pitch for each — from one page.
+            </p>
+          </div>
           <div className="grid grid-cols-3 gap-8">
             {[
-              { icon: FileText, value: "30s", label: "Average generation time" },
-              { icon: Users, value: "5 free", label: "Proposals to start" },
-              { icon: BarChart3, value: "100%", label: "Customizable output" },
+              { icon: FileText, value: "20", label: "URLs per bulk run" },
+              { icon: Users, value: "1 credit", label: "Per email found" },
+              { icon: BarChart3, value: "1 page", label: "Manage all extracted leads" },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <div className="flex items-center justify-center gap-2 mb-1">
@@ -101,7 +107,7 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <p className="section-title mb-3">How It Works</p>
             <h2 className="text-display font-bold text-ink-900">
-              From project brief to proposal in 3 steps
+              Go from website to outreach in 3 steps
             </h2>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -109,20 +115,20 @@ export default function LandingPage() {
               {
                 step: "01",
                 icon: PenTool,
-                title: "Describe Your Project",
-                desc: "Enter the client name, project description, budget, and timeline. Add as much or as little detail as you want.",
+                title: "Paste any website URL",
+                desc: "Found a potential client, partner, or investor? Drop their website URL.",
               },
               {
                 step: "02",
                 icon: Sparkles,
-                title: "AI Generates Your Proposal",
-                desc: "GPT-4o crafts a professional proposal with cover letter, scope, deliverables, pricing table, terms, and next steps.",
+                title: "We extract the contact email",
+                desc: "ProposalPilot crawls the site and finds publicly listed contact emails automatically.",
               },
               {
                 step: "03",
                 icon: Send,
-                title: "Send & Track",
-                desc: "Share via link, track when clients view it, and collect electronic signatures — all in one place.",
+                title: "AI writes your pitch, you hit send",
+                desc: "Choose your outreach type — proposal, sales pitch, investment ask, or quote. GPT-4o writes a personalized email. Your mail app opens ready to go.",
               },
             ].map((item) => (
               <div key={item.step} className="relative">
@@ -224,17 +230,17 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <p className="section-title mb-3">Features</p>
             <h2 className="text-display font-bold text-ink-900">
-              Everything you need to win more clients
+              Built for people who do their own outreach
             </h2>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { icon: Eye, title: "Auto Email Extraction", desc: "Scan website contact pages and extract usable business emails in one click." },
-              { icon: Sparkles, title: "4 Outreach Types", desc: "Generate Proposals, Pitches, Investment outreach, and Quotes tailored to each lead." },
-              { icon: Send, title: "Send or Copy Instantly", desc: "Open your own email client instantly or copy polished drafts to clipboard." },
-              { icon: BarChart3, title: "Outreach Tracking", desc: "Track extracted leads and all outreach drafts/sent status in one place." },
-              { icon: Users, title: "Client + Lead Workflow", desc: "Turn unknown websites into qualified contacts and active conversations quickly." },
-              { icon: Shield, title: "Permission First", desc: "Built with a clear permission notice to avoid spam and keep outreach responsible." },
+              { icon: Users, title: "Solo founders", desc: "Reaching out to potential clients, partners, and investors directly." },
+              { icon: FileText, title: "Freelancers", desc: "Pitching new projects to companies you find online." },
+              { icon: Eye, title: "Link builders", desc: "Contacting site owners fast for SEO outreach." },
+              { icon: Send, title: "Manual outreach workflows", desc: "Perfect when you find a company first and want to message them now." },
+              { icon: Sparkles, title: "Personalized pitches", desc: "Generate messages based on what each company actually does." },
+              { icon: Shield, title: "Public contact data only", desc: "Extracts publicly listed emails with a clear outreach flow." },
             ].map((feature) => (
               <div key={feature.title} className="card p-6 group hover:shadow-card-hover transition-all">
                 <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center mb-4 group-hover:bg-brand-100 transition-colors">

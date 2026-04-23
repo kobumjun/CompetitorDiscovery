@@ -52,10 +52,10 @@ const comparisonRows = [
   },
   {
     feature: "Best for",
-    proposalPilot: "Freelancers, solo founders",
-    apollo: "Sales teams",
-    hunter: "Email verification",
-    clay: "Revenue ops teams",
+    proposalPilot: "Solo outreach — freelancers, founders, link builders",
+    apollo: "Sales teams with large pipelines",
+    hunter: "Email verification at scale",
+    clay: "Revenue ops and enrichment workflows",
   },
 ];
 
@@ -84,8 +84,8 @@ export default function ComparePage() {
           ProposalPilot vs Other Outreach Tools
         </h1>
         <p className="text-ink-600 mb-8 max-w-3xl">
-          There are many outreach tools available. Here&apos;s how ProposalPilot compares to
-          popular alternatives.
+          Most outreach tools start with a database. ProposalPilot starts with the website you
+          already found. Here&apos;s how it compares.
         </p>
 
         <div className="card overflow-x-auto">
