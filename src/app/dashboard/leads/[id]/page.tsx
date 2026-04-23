@@ -316,6 +316,15 @@ export default function LeadDetailPage() {
 
         {subject && body && (
           <div className="space-y-3">
+            <div className="rounded-xl border border-surface-200 bg-white shadow-sm">
+              <div className="px-4 py-3 border-b border-surface-200">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Subject</p>
+                <p className="text-sm font-semibold text-ink-900 mt-1 break-words">{subject}</p>
+              </div>
+              <div className="px-4 py-3 max-h-80 overflow-y-auto">
+                <p className="text-sm text-ink-700 whitespace-pre-wrap leading-relaxed">{body}</p>
+              </div>
+            </div>
             <div className="flex flex-wrap gap-2">
               {writeMode === "ai" && (
                 <button onClick={generateEmail} className="btn-secondary" disabled={generating}>
