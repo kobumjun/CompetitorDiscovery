@@ -51,7 +51,7 @@ export default function LandingPage() {
             <Zap className="w-3.5 h-3.5" />
             Website to outreach automation
           </div>
-          <h1 className="mb-6 font-black text-ink-900 [font-size:clamp(2rem,7vw,2.75rem)] leading-[1.18] tracking-[-0.02em] [word-break:keep-all] [overflow-wrap:break-word] [hyphens:none] px-5 sm:px-0 max-[480px]:[font-size:clamp(1.75rem,6.5vw,2.25rem)] max-[480px]:leading-[1.15] md:text-display-xl md:leading-tight">
+          <h1 className="mb-6 font-black text-ink-900 [font-size:clamp(2.5rem,9vw,3.25rem)] leading-[1.13] tracking-[-0.025em] [word-break:keep-all] [overflow-wrap:break-word] [hyphens:none] px-4 sm:px-0 max-[480px]:[font-size:clamp(2.25rem,8.5vw,2.75rem)] max-[480px]:leading-[1.1] md:text-display-xl md:leading-tight">
             Found a company you want to reach? Get their email and pitch them in 60 seconds.
           </h1>
           <p className="text-lg md:text-xl text-ink-500 max-w-2xl mx-auto mb-10 leading-relaxed">
