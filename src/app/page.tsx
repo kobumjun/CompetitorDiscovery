@@ -43,15 +43,15 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="pt-32 pb-20 md:pt-40 md:pb-28 relative overflow-hidden">
+      <section className="pt-32 pb-20 md:pt-40 md:pb-28 relative overflow-hidden overflow-x-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-brand-50/50 via-white to-white" />
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-brand-100/30 rounded-full blur-3xl" />
-        <div className="relative max-w-4xl mx-auto px-6 text-center">
+        <div className="relative max-w-4xl mx-auto px-5 sm:px-6 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-50 border border-brand-200 rounded-full text-xs font-semibold text-brand-700 mb-6">
             <Zap className="w-3.5 h-3.5" />
             Website to outreach automation
           </div>
-          <h1 className="text-display-xl font-black text-ink-900 mb-6 leading-tight">
+          <h1 className="mb-6 font-black text-ink-900 [font-size:clamp(2rem,7vw,2.75rem)] leading-[1.18] tracking-[-0.02em] [word-break:keep-all] [overflow-wrap:break-word] [hyphens:none] px-5 sm:px-0 max-[480px]:[font-size:clamp(1.75rem,6.5vw,2.25rem)] max-[480px]:leading-[1.15] md:text-display-xl md:leading-tight">
             Found a company you want to reach? Get their email and pitch them in 60 seconds.
           </h1>
           <p className="text-lg md:text-xl text-ink-500 max-w-2xl mx-auto mb-10 leading-relaxed">
@@ -83,18 +83,18 @@ export default function LandingPage() {
               and lets you generate a personalized pitch for each — from one page.
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-8">
+          <div className="grid grid-cols-2 max-[480px]:grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
             {[
               { icon: FileText, value: "20", label: "URLs per bulk run" },
               { icon: Users, value: "1 credit", label: "Per email found" },
               { icon: BarChart3, value: "1 page", label: "Manage all extracted leads" },
             ].map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div className="flex items-center justify-center gap-2 mb-1">
-                  <stat.icon className="w-4 h-4 text-brand-500" />
-                  <span className="text-2xl font-bold text-ink-900">{stat.value}</span>
-                </div>
-                <span className="text-sm text-ink-500">{stat.label}</span>
+              <div key={stat.label} className="flex flex-col items-center text-center gap-2">
+                <stat.icon className="w-4 h-4 text-brand-500" />
+                <span className="[font-size:clamp(2rem,8vw,3rem)] leading-none font-bold text-ink-900 md:text-2xl">
+                  {stat.value}
+                </span>
+                <span className="text-sm text-ink-500 leading-snug max-w-[16ch]">{stat.label}</span>
               </div>
             ))}
           </div>
