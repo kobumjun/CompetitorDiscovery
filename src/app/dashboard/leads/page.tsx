@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSWRConfig } from "swr";
 import { createClient } from "@/lib/supabase/client";
 import type { ExtractedLead, OutreachType } from "@/types";
-import { ChevronDown, Copy, Download, Globe, Grid3X3, Mail, Plus, Sparkles, X } from "lucide-react";
+import { ChevronDown, Copy, Download, Globe, Grid3X3, Mail, Plus, Sparkles } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { ListPagination, LIST_PAGE_SIZE } from "@/components/list-pagination";
 import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
@@ -56,6 +56,18 @@ type BulkResponse = {
   message?: string;
 };
 
+type RowComposerState = {
+  open: boolean;
+  outreachType: OutreachType;
+  writeMode: "ai" | "manual";
+  context: string;
+  subject: string;
+  body: string;
+  generating: boolean;
+  error: string | null;
+  notice: string | null;
+};
+
 const OUTREACH_TYPES: { key: OutreachType; label: string }[] = [
   { key: "proposal", label: "Proposal" },
   { key: "pitch", label: "Sales Pitch" },
@@ -95,15 +107,7 @@ export default function LeadsPage() {
   const [bulkResult, setBulkResult] = useState<BulkResponse | null>(null);
   const [failedOpen, setFailedOpen] = useState(false);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
-  const [activeRow, setActiveRow] = useState<BulkLeadResult | null>(null);
-  const [bulkOutreachType, setBulkOutreachType] = useState<OutreachType>("proposal");
-  const [bulkWriteMode, setBulkWriteMode] = useState<"ai" | "manual">("manual");
-  const [bulkContext, setBulkContext] = useState("");
-  const [bulkSubject, setBulkSubject] = useState("");
-  const [bulkBody, setBulkBody] = useState("");
-  const [bulkGenerating, setBulkGenerating] = useState(false);
-  const [bulkActionError, setBulkActionError] = useState<string | null>(null);
-  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+  const [rowComposers, setRowComposers] = useState<Record<string, RowComposerState>>({});
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const progressSteps = [
     "Fetching website...",
@@ -214,20 +218,32 @@ export default function LeadsPage() {
     return `${row.lead_id}:${row.email}`;
   }
 
-  function openWriteModal(row: BulkLeadResult, preselect: "ai" | "manual" = "manual") {
-    setActiveRow(row);
-    setBulkWriteMode(preselect);
-    setBulkContext("");
-    setBulkSubject("");
-    setBulkBody("");
-    setBulkActionError(null);
-    setBulkNotice(null);
+  function getDefaultComposerState(): RowComposerState {
+    return {
+      open: false,
+      outreachType: "proposal",
+      writeMode: "manual",
+      context: "",
+      subject: "",
+      body: "",
+      generating: false,
+      error: null,
+      notice: null,
+    };
   }
 
-  function closeWriteModal() {
-    setActiveRow(null);
-    setBulkActionError(null);
-    setBulkNotice(null);
+  function updateComposer(rowKey: string, updater: (prev: RowComposerState) => RowComposerState) {
+    setRowComposers((prev) => {
+      const current = prev[rowKey] ?? getDefaultComposerState();
+      return {
+        ...prev,
+        [rowKey]: updater(current),
+      };
+    });
+  }
+
+  function toggleComposer(rowKey: string) {
+    updateComposer(rowKey, (prev) => ({ ...prev, open: !prev.open }));
   }
 
   function withSignature(content: string) {
@@ -235,14 +251,14 @@ export default function LeadsPage() {
     return `${content}${signature}`;
   }
 
-  async function saveBulkOutreachRecord(row: BulkLeadResult, subject: string, body: string) {
+  async function saveBulkOutreachRecord(row: BulkLeadResult, subject: string, body: string, type: OutreachType) {
     try {
       await fetch("/api/outreach/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leadId: row.lead_id,
-          type: bulkOutreachType,
+          type,
           recipientEmails: [row.email],
           subject,
           body,
@@ -254,54 +270,58 @@ export default function LeadsPage() {
     }
   }
 
-  function openRowMailto(row: BulkLeadResult, subject: string, body: string) {
+  function openRowMailto(row: BulkLeadResult, rowKey: string, subject: string, body: string, type: OutreachType) {
     const encodedSubject = encodeURIComponent(subject);
     const encodedBody = encodeURIComponent(withSignature(body));
     const mailtoLink = `mailto:${encodeURIComponent(row.email)}?subject=${encodedSubject}&body=${encodedBody}`;
     window.location.href = mailtoLink;
-    setBulkNotice("Opened your default email client.");
-    void saveBulkOutreachRecord(row, subject, body);
+    updateComposer(rowKey, (prev) => ({ ...prev, notice: "Opened your default email client.", error: null }));
+    void saveBulkOutreachRecord(row, subject, body, type);
   }
 
   async function handleGenerateBulkAi(row: BulkLeadResult) {
-    setBulkGenerating(true);
-    setBulkActionError(null);
-    setBulkNotice(null);
+    const rowKey = getRowKey(row);
+    const composer = rowComposers[rowKey] ?? getDefaultComposerState();
+    updateComposer(rowKey, (prev) => ({ ...prev, generating: true, error: null, notice: null }));
     try {
       const response = await fetch("/api/outreach/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leadId: row.lead_id,
-          type: bulkOutreachType,
-          context: bulkContext,
+          type: composer.outreachType,
+          context: composer.context,
           recipientEmails: [row.email],
         }),
       });
       const payload = await response.json();
       if (!response.ok) {
-        setBulkActionError(payload.error || "Failed to generate outreach");
+        updateComposer(rowKey, (prev) => ({ ...prev, generating: false, error: payload.error || "Failed to generate outreach" }));
         return;
       }
       const generatedSubject = payload.subject || "";
       const generatedBody = payload.body || "";
-      setBulkSubject(generatedSubject);
-      setBulkBody(generatedBody);
-      openRowMailto(row, generatedSubject, generatedBody);
+      updateComposer(rowKey, (prev) => ({
+        ...prev,
+        subject: generatedSubject,
+        body: generatedBody,
+      }));
       if (typeof payload.remainingCredits === "number") {
         void mutateGlobal(DASHBOARD_CREDITS_KEY, payload.remainingCredits, false);
       }
       await mutate();
     } catch {
-      setBulkActionError("Unexpected error while generating outreach.");
+      updateComposer(rowKey, (prev) => ({ ...prev, error: "Unexpected error while generating outreach." }));
     } finally {
-      setBulkGenerating(false);
+      updateComposer(rowKey, (prev) => ({ ...prev, generating: false }));
     }
   }
 
   function handleOpenManual(row: BulkLeadResult) {
-    if (!bulkSubject.trim() || !bulkBody.trim()) return;
-    openRowMailto(row, bulkSubject.trim(), bulkBody.trim());
+    const rowKey = getRowKey(row);
+    const composer = rowComposers[rowKey];
+    if (!composer || !composer.subject.trim() || !composer.body.trim()) return;
+    openRowMailto(row, rowKey, composer.subject.trim(), composer.body.trim(), composer.outreachType);
   }
 
   function handleDownloadCsv() {
@@ -412,40 +432,165 @@ export default function LeadsPage() {
                   </thead>
                   <tbody>
                     {bulkResult.leads.map((row) => {
+                      const rowKey = getRowKey(row);
+                      const composer = rowComposers[rowKey] ?? getDefaultComposerState();
                       return (
-                        <tr key={getRowKey(row)} className="border-b border-surface-100">
-                          <td className="py-2 pr-2">
-                            <input
-                              type="checkbox"
-                              checked={selectedEmails.has(row.email)}
-                              onChange={() => toggleRow(row.email)}
-                            />
-                          </td>
-                          <td className="py-2 pr-2 text-ink-800">{row.email}</td>
-                          <td className="py-2 pr-2 text-ink-700">{row.company_name}</td>
-                          <td className="py-2 pr-2">
-                            <a className="text-brand-600 hover:underline" href={row.source_url} target="_blank" rel="noreferrer">
-                              {row.source_url}
-                            </a>
-                          </td>
-                          <td className="py-2">
-                            <div className="flex items-center gap-1">
-                              <button className="btn-ghost text-xs" onClick={() => openWriteModal(row, "manual")}>
-                                Write Email
-                              </button>
-                              <button
-                                className="p-1.5 text-ink-500 hover:text-ink-700"
-                                onClick={() => void navigator.clipboard.writeText(row.email)}
-                                title="Copy Email"
-                              >
-                                <Copy className="w-4 h-4" />
-                              </button>
-                              <a href={`mailto:${row.email}`} className="p-1.5 text-ink-500 hover:text-ink-700" title="Open in Mail">
-                                <Mail className="w-4 h-4" />
+                        <Fragment key={rowKey}>
+                          <tr className="border-b border-surface-100">
+                            <td className="py-2 pr-2 align-top">
+                              <input
+                                type="checkbox"
+                                checked={selectedEmails.has(row.email)}
+                                onChange={() => toggleRow(row.email)}
+                              />
+                            </td>
+                            <td className="py-2 pr-2 text-ink-800 align-top">{row.email}</td>
+                            <td className="py-2 pr-2 text-ink-700 align-top">{row.company_name}</td>
+                            <td className="py-2 pr-2 align-top">
+                              <a className="text-brand-600 hover:underline" href={row.source_url} target="_blank" rel="noreferrer">
+                                {row.source_url}
                               </a>
-                            </div>
-                          </td>
-                        </tr>
+                            </td>
+                            <td className="py-2 align-top">
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  className="inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
+                                  onClick={() => toggleComposer(rowKey)}
+                                >
+                                  {composer.open ? "Close" : "Write Email"}
+                                </button>
+                                <button
+                                  className="p-1.5 rounded-md text-ink-500 hover:bg-surface-100 hover:text-ink-700"
+                                  onClick={() => void navigator.clipboard.writeText(row.email)}
+                                  title="Copy Email"
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </button>
+                                <a
+                                  href={`mailto:${row.email}`}
+                                  className="p-1.5 rounded-md text-ink-500 hover:bg-surface-100 hover:text-ink-700"
+                                  title="Open in Mail"
+                                >
+                                  <Mail className="w-4 h-4" />
+                                </a>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr className="border-b border-surface-100">
+                            <td colSpan={5} className="p-0">
+                              <div
+                                className={cn(
+                                  "overflow-hidden transition-all duration-300 ease-out",
+                                  composer.open ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0"
+                                )}
+                              >
+                                <div className="bg-orange-50/30 border-l-2 border-orange-400 px-4 py-4 sm:px-5 sm:py-5">
+                                  <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
+                                    <div className="text-sm font-medium text-ink-800">Choose email type:</div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                      {OUTREACH_TYPES.map((item) => (
+                                        <button
+                                          key={item.key}
+                                          type="button"
+                                          onClick={() =>
+                                            updateComposer(rowKey, (prev) => ({ ...prev, outreachType: item.key }))
+                                          }
+                                          className={cn(
+                                            "btn-secondary text-xs justify-center",
+                                            composer.outreachType === item.key && "bg-brand-50 border-brand-300 text-brand-700"
+                                          )}
+                                        >
+                                          {item.label}
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => updateComposer(rowKey, (prev) => ({ ...prev, writeMode: "manual" }))}
+                                        className={cn(
+                                          "btn-secondary justify-center",
+                                          composer.writeMode === "manual" && "bg-brand-50 border-brand-300 text-brand-700"
+                                        )}
+                                      >
+                                        ✍️ Write manually (free)
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateComposer(rowKey, (prev) => ({ ...prev, writeMode: "ai" }))}
+                                        className={cn(
+                                          "btn-secondary justify-center",
+                                          composer.writeMode === "ai" && "bg-brand-50 border-brand-300 text-brand-700"
+                                        )}
+                                      >
+                                        ✨ Generate with AI (1 credit)
+                                      </button>
+                                    </div>
+
+                                    {composer.writeMode === "ai" && (
+                                      <div className="space-y-2">
+                                        <textarea
+                                          className="input-field min-h-24"
+                                          value={composer.context}
+                                          onChange={(e) =>
+                                            updateComposer(rowKey, (prev) => ({ ...prev, context: e.target.value }))
+                                          }
+                                          placeholder="Specific context for this outreach..."
+                                        />
+                                        <button className="btn-primary" onClick={() => handleGenerateBulkAi(row)} disabled={composer.generating}>
+                                          <Sparkles className="w-4 h-4" />
+                                          {composer.generating ? "Generating..." : "Generate Email with AI (1 credit)"}
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    <input
+                                      className="input-field"
+                                      value={composer.subject}
+                                      onChange={(e) =>
+                                        updateComposer(rowKey, (prev) => ({ ...prev, subject: e.target.value }))
+                                      }
+                                      placeholder="Email subject line"
+                                    />
+                                    <textarea
+                                      className="input-field min-h-36"
+                                      value={composer.body}
+                                      onChange={(e) =>
+                                        updateComposer(rowKey, (prev) => ({ ...prev, body: e.target.value }))
+                                      }
+                                      placeholder="Write your email here..."
+                                    />
+
+                                    {composer.subject && composer.body && (
+                                      <div className="rounded-xl border border-surface-200 bg-white shadow-sm">
+                                        <div className="px-4 py-3 border-b border-surface-200">
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Subject</p>
+                                          <p className="text-sm font-semibold text-ink-900 mt-1 break-words">{composer.subject}</p>
+                                        </div>
+                                        <div className="px-4 py-3 max-h-60 overflow-y-auto">
+                                          <p className="text-sm text-ink-700 whitespace-pre-wrap leading-relaxed">{composer.body}</p>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    <button
+                                      className="btn-primary"
+                                      onClick={() => handleOpenManual(row)}
+                                      disabled={!composer.subject.trim() || !composer.body.trim()}
+                                    >
+                                      <Mail className="w-4 h-4" />
+                                      Open in Mail
+                                    </button>
+
+                                    {composer.error && <p className="text-sm text-red-600">{composer.error}</p>}
+                                    {composer.notice && <p className="text-sm text-emerald-700">{composer.notice}</p>}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        </Fragment>
                       );
                     })}
                   </tbody>
@@ -472,114 +617,6 @@ export default function LeadsPage() {
               )}
             </div>
           )}
-        </div>
-      )}
-
-      {activeRow && (
-        <div className="fixed inset-0 z-50 bg-ink-900/40 p-4 sm:p-8" onClick={closeWriteModal}>
-          <div
-            className="mx-auto max-w-2xl rounded-xl border border-surface-200 bg-white p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-ink-900">Write Email</h3>
-                <p className="text-xs text-ink-500 mt-1">
-                  {activeRow.email} | {activeRow.company_name}
-                </p>
-              </div>
-              <button
-                className="rounded-lg p-1.5 text-ink-500 hover:bg-surface-100 hover:text-ink-700"
-                onClick={closeWriteModal}
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
-              <div className="text-sm font-medium text-ink-800">Choose email type:</div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {OUTREACH_TYPES.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setBulkOutreachType(item.key)}
-                    className={cn(
-                      "btn-secondary text-xs justify-center",
-                      bulkOutreachType === item.key && "bg-brand-50 border-brand-300 text-brand-700"
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setBulkWriteMode("manual")}
-                  className={cn(
-                    "btn-secondary justify-center",
-                    bulkWriteMode === "manual" && "bg-brand-50 border-brand-300 text-brand-700"
-                  )}
-                >
-                  ✍️ Write manually (free)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBulkWriteMode("ai")}
-                  className={cn(
-                    "btn-secondary justify-center",
-                    bulkWriteMode === "ai" && "bg-brand-50 border-brand-300 text-brand-700"
-                  )}
-                >
-                  ✨ Generate with AI (1 credit)
-                </button>
-              </div>
-
-              {bulkWriteMode === "ai" ? (
-                <div className="space-y-2">
-                  <textarea
-                    className="input-field min-h-24"
-                    value={bulkContext}
-                    onChange={(e) => setBulkContext(e.target.value)}
-                    placeholder="Specific context for this outreach..."
-                  />
-                  <button className="btn-primary" onClick={() => handleGenerateBulkAi(activeRow)} disabled={bulkGenerating}>
-                    <Sparkles className="w-4 h-4" />
-                    {bulkGenerating ? "Generating..." : "Generate & Open Mail"}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <input
-                    className="input-field"
-                    value={bulkSubject}
-                    onChange={(e) => setBulkSubject(e.target.value)}
-                    placeholder="Email subject line"
-                  />
-                  <textarea
-                    className="input-field min-h-36"
-                    value={bulkBody}
-                    onChange={(e) => setBulkBody(e.target.value)}
-                    placeholder="Write your email here..."
-                  />
-                  <button
-                    className="btn-primary"
-                    onClick={() => handleOpenManual(activeRow)}
-                    disabled={!bulkSubject.trim() || !bulkBody.trim()}
-                  >
-                    <Mail className="w-4 h-4" />
-                    Open in Mail
-                  </button>
-                </div>
-              )}
-
-              {bulkActionError && <p className="text-sm text-red-600">{bulkActionError}</p>}
-              {bulkNotice && <p className="text-sm text-emerald-700">{bulkNotice}</p>}
-            </div>
-          </div>
         </div>
       )}
 
