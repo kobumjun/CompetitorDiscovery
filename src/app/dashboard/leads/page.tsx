@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useSWRConfig } from "swr";
 import { createClient } from "@/lib/supabase/client";
 import type { ExtractedLead, OutreachType } from "@/types";
-import { ChevronDown, Copy, Download, Globe, Grid3X3, Mail, Plus, Sparkles } from "lucide-react";
+import { ChevronDown, Copy, Download, Globe, Grid3X3, Mail, Plus, Search, Sparkles } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { ListPagination, LIST_PAGE_SIZE } from "@/components/list-pagination";
 import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
@@ -53,6 +53,22 @@ type BulkResponse = {
   leads: BulkLeadResult[];
   failed?: { url: string; reason: string }[];
   partial?: boolean;
+  message?: string;
+};
+
+type SmartProspectResponse = {
+  success: boolean;
+  requestedCount: number;
+  searchedCount: number;
+  processedCount: number;
+  successfulUrls: number;
+  failedUrls: number;
+  creditsReserved: number;
+  creditsUsed: number;
+  creditsRefunded: number;
+  creditsRemaining: number;
+  leads: BulkLeadResult[];
+  failed?: { url: string; reason: string }[];
   message?: string;
 };
 
@@ -105,6 +121,13 @@ export default function LeadsPage() {
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkWarning, setBulkWarning] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState<BulkResponse | null>(null);
+  const [openUrlInput, setOpenUrlInput] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [targetCount, setTargetCount] = useState<1 | 3 | 5 | 10>(3);
+  const [smartLoading, setSmartLoading] = useState(false);
+  const [smartProgress, setSmartProgress] = useState<string | null>(null);
+  const [smartCounter, setSmartCounter] = useState(0);
+  const [smartError, setSmartError] = useState<string | null>(null);
   const [failedOpen, setFailedOpen] = useState(false);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
   const [rowComposers, setRowComposers] = useState<Record<string, RowComposerState>>({});
@@ -127,6 +150,7 @@ export default function LeadsPage() {
     const prefillUrls = searchParams.get("urls");
     if (!prefillUrls || autoExtractRanRef.current) return;
     setBulkInput(prefillUrls);
+    setOpenUrlInput(true);
   }, [searchParams]);
 
   function parseBulkUrls(input: string): string[] {
@@ -202,6 +226,65 @@ export default function LeadsPage() {
       setBulkError("Unexpected error while extracting in bulk.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSmartSearch() {
+    if (!keyword.trim()) return;
+    setSmartLoading(true);
+    setSmartError(null);
+    setSmartProgress("Searching for keywords...");
+    setSmartCounter(0);
+    setBulkResult(null);
+    setSelectedEmails(new Set());
+
+    const timerA = setTimeout(() => setSmartProgress("Found companies. Extracting emails..."), 3000);
+    const timerB = setTimeout(() => setSmartProgress("Almost done..."), 15000);
+    const counterTimer = setInterval(() => {
+      setSmartCounter((prev) => Math.min(prev + 1, targetCount));
+    }, 1400);
+
+    try {
+      const response = await fetch("/api/search-prospects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: keyword.trim(), requestedCount: targetCount }),
+      });
+      const payload = (await response.json()) as SmartProspectResponse & { error?: string };
+      if (!response.ok) {
+        setSmartError(payload.error || "Search service unavailable. Please try again later.");
+        return;
+      }
+
+      setBulkResult({
+        success: true,
+        totalUrls: payload.processedCount,
+        successfulUrls: payload.successfulUrls,
+        failedUrls: payload.failedUrls,
+        emailsFound: payload.leads.length,
+        creditsUsed: payload.creditsUsed,
+        creditsRemaining: payload.creditsRemaining,
+        leads: payload.leads,
+        failed: payload.failed,
+        partial: payload.creditsRefunded > 0,
+        message: payload.message,
+      });
+      setSmartCounter(payload.processedCount || targetCount);
+      setSmartProgress("Done!");
+
+      if (typeof payload.creditsRemaining === "number") {
+        void mutateGlobal(DASHBOARD_CREDITS_KEY, payload.creditsRemaining, false);
+      }
+      await mutate();
+      setListPage(1);
+    } catch {
+      setSmartError("Search service unavailable. Please try again later.");
+    } finally {
+      clearTimeout(timerA);
+      clearTimeout(timerB);
+      clearInterval(counterTimer);
+      setSmartLoading(false);
+      setTimeout(() => setSmartProgress(null), 1200);
     }
   }
 
@@ -348,44 +431,117 @@ export default function LeadsPage() {
       <div className="mb-8">
         <h1 className="text-display font-bold text-ink-900">Find Contacts</h1>
         <p className="text-ink-500 mt-1">
-          Paste any company URLs to extract their contact emails — up to 20 at once.
+          Search by keyword or paste URLs to find contact emails.
         </p>
       </div>
 
       <div className="card p-4 mb-6">
         <label className="text-sm font-medium text-ink-700 mb-2 block">
-          Paste website URLs (one per line, max 20)
+          What kind of businesses do you want to reach?
         </label>
-        <textarea
-          className="input-field min-h-[180px]"
-          placeholder="Paste URLs here, one per line..."
-          value={bulkInput}
-          onChange={(e) => setBulkInput(e.target.value)}
+        <input
+          className="input-field h-12"
+          placeholder="e.g., marketing agencies in London or SaaS companies"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
         />
-        <p className="mt-2 text-xs text-ink-500">
-          We&apos;ll crawl each site and extract contact emails. Costs 1 credit per email found.
-        </p>
-        <p className="mt-1 text-xs text-brand-700">{validBulkUrls.length} valid URLs detected</p>
-        {bulkWarning && <p className="mt-2 text-xs text-amber-700">{bulkWarning}</p>}
-        {bulkError && <p className="mt-2 text-sm text-red-600">{bulkError}</p>}
+        <div className="mt-4">
+          <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {[1, 3, 5, 10].map((count) => {
+              const disabled = credits !== null && count > credits;
+              return (
+                <button
+                  key={count}
+                  type="button"
+                  disabled={disabled || smartLoading}
+                  title={disabled ? `Not enough credits. You have ${credits} credits.` : undefined}
+                  onClick={() => setTargetCount(count as 1 | 3 | 5 | 10)}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-sm font-semibold transition-colors",
+                    count === targetCount
+                      ? "border-orange-500 bg-orange-500 text-white"
+                      : "border-surface-200 bg-white text-ink-600 hover:bg-surface-50",
+                    count === 10 && "text-xs sm:text-sm",
+                    disabled && "opacity-40 cursor-not-allowed hover:bg-white"
+                  )}
+                >
+                  {count}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <button
-          onClick={handleBulkExtract}
-          disabled={loading || validBulkUrls.length === 0 || credits <= 0 || Boolean(bulkError)}
-          className="btn-primary mt-3"
+          onClick={handleSmartSearch}
+          disabled={smartLoading || !keyword.trim() || credits === 0 || (credits !== null && targetCount > credits)}
+          className="mt-3 inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
         >
-          <Grid3X3 className="w-4 h-4" />
-          {loading ? "Extracting..." : "Extract Emails"}
+          <Search className="w-4 h-4 mr-1.5" />
+          Find {targetCount} Prospects & Emails
         </button>
-        {loading && (
-          <div className="mt-3 rounded-lg border border-surface-200 bg-surface-50 p-3">
-            {progressSteps.map((step, idx) => (
-              <div key={step} className="text-xs text-ink-500 py-0.5">
-                {idx < 2 ? "●" : "○"} {step}
-              </div>
-            ))}
+        <p className="mt-2 text-xs text-ink-500">
+          Uses {targetCount} credits. Unused credits refunded automatically.
+        </p>
+        {smartProgress && (
+          <div className="mt-2 space-y-1">
+            <p className="text-sm text-brand-700">{smartProgress}</p>
+            {smartLoading && (
+              <p className="text-xs text-ink-500">
+                Processing {smartCounter} of {targetCount} sites...
+              </p>
+            )}
           </div>
         )}
-        {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+        {smartError && <p className="mt-2 text-sm text-red-600">{smartError}</p>}
+
+        <div className="mt-4 rounded-lg border border-surface-200 bg-white">
+          <button
+            className="w-full px-4 py-3 text-left text-sm font-medium text-ink-700 flex items-center justify-between"
+            onClick={() => setOpenUrlInput((prev) => !prev)}
+          >
+            Already have URLs? Paste them here
+            <ChevronDown className={cn("w-4 h-4 transition-transform", openUrlInput && "rotate-180")} />
+          </button>
+
+          {openUrlInput && (
+            <div className="px-4 pb-4 pt-1">
+              <label className="text-sm font-medium text-ink-700 mb-2 block">
+                Paste website URLs (one per line, max 20)
+              </label>
+              <textarea
+                className="input-field min-h-[180px]"
+                placeholder="Paste URLs here, one per line..."
+                value={bulkInput}
+                onChange={(e) => setBulkInput(e.target.value)}
+              />
+              <p className="mt-2 text-xs text-ink-500">
+                We&apos;ll crawl each site and extract contact emails. Costs 1 credit per email found.
+              </p>
+              <p className="mt-1 text-xs text-brand-700">{validBulkUrls.length} valid URLs detected</p>
+              {bulkWarning && <p className="mt-2 text-xs text-amber-700">{bulkWarning}</p>}
+              {bulkError && <p className="mt-2 text-sm text-red-600">{bulkError}</p>}
+              <button
+                onClick={handleBulkExtract}
+                disabled={loading || validBulkUrls.length === 0 || credits <= 0 || Boolean(bulkError)}
+                className="btn-primary mt-3"
+              >
+                <Grid3X3 className="w-4 h-4" />
+                {loading ? "Extracting..." : "Extract Emails"}
+              </button>
+              {loading && (
+                <div className="mt-3 rounded-lg border border-surface-200 bg-surface-50 p-3">
+                  {progressSteps.map((step, idx) => (
+                    <div key={step} className="text-xs text-ink-500 py-0.5">
+                      {idx < 2 ? "●" : "○"} {step}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+            </div>
+          )}
+        </div>
       </div>
 
       {bulkResult && (
