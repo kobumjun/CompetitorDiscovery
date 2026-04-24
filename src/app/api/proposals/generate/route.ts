@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
           metadata: { mode: "manual" },
         });
 
-        return NextResponse.json({ proposal });
+        return NextResponse.json({ proposal, remainingCredits: null });
       }
 
       const creditResult = await deductCredits(user.id, 1);
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
         type: "created",
       });
 
-      return NextResponse.json({ proposal });
+      return NextResponse.json({ proposal, remainingCredits: creditResult.remaining });
     } catch (err) {
       console.error("Proposal generation failed:", err);
       await addCredits(user.id, 1);

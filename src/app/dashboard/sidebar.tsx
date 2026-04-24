@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type { User } from "@/types";
 import { planIncludedCredits } from "@/types";
 import { SiteFooter } from "@/components/site-footer";
+import { useDashboardCredits } from "@/lib/use-dashboard-credits";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
@@ -43,8 +44,9 @@ export function DashboardSidebar({ user }: { user: User }) {
     return pathname.startsWith(href);
   };
 
+  const { data: liveCredits = user.credits } = useDashboardCredits(user.credits);
   const maxCredits = planIncludedCredits(user.plan);
-  const creditPercentage = Math.min((user.credits / maxCredits) * 100, 100);
+  const creditPercentage = Math.min((liveCredits / maxCredits) * 100, 100);
 
   return (
     <aside className="dashboard-sidebar">
@@ -79,24 +81,24 @@ export function DashboardSidebar({ user }: { user: User }) {
       <div className="p-4 space-y-3 border-t border-surface-200">
         <div className={cn(
           "rounded-lg p-3",
-          user.credits <= 3 && user.credits > 0 ? "bg-amber-50" : user.credits === 0 ? "bg-red-50" : "bg-surface-50"
+          liveCredits <= 3 && liveCredits > 0 ? "bg-amber-50" : liveCredits === 0 ? "bg-red-50" : "bg-surface-50"
         )}>
           <div className="flex items-center justify-between mb-2">
             <span className={cn(
               "text-xs font-semibold flex items-center gap-1.5",
-              user.credits === 0 ? "text-red-600" : user.credits <= 3 ? "text-amber-600" : "text-ink-500"
+              liveCredits === 0 ? "text-red-600" : liveCredits <= 3 ? "text-amber-600" : "text-ink-500"
             )}>
               <Zap className={cn(
                 "w-3.5 h-3.5",
-                user.credits === 0 ? "text-red-500" : user.credits <= 3 ? "text-amber-500" : "text-brand-500"
+                liveCredits === 0 ? "text-red-500" : liveCredits <= 3 ? "text-amber-500" : "text-brand-500"
               )} />
               Credits
             </span>
             <span className={cn(
               "text-xs font-bold",
-              user.credits === 0 ? "text-red-700" : user.credits <= 3 ? "text-amber-700" : "text-ink-900"
+              liveCredits === 0 ? "text-red-700" : liveCredits <= 3 ? "text-amber-700" : "text-ink-900"
             )}>
-              {user.credits}
+              {liveCredits}
               <span className="text-ink-400 font-normal">/{maxCredits}</span>
             </span>
           </div>
@@ -109,12 +111,12 @@ export function DashboardSidebar({ user }: { user: User }) {
               style={{ width: `${creditPercentage}%` }}
             />
           </div>
-          {user.credits <= 3 && (
+          {liveCredits <= 3 && (
             <p className={cn(
               "text-[10px] mt-1.5",
-              user.credits === 0 ? "text-red-600" : "text-amber-600"
+              liveCredits === 0 ? "text-red-600" : "text-amber-600"
             )}>
-              {user.credits === 0 ? "No credits left!" : "Running low on credits!"}
+              {liveCredits === 0 ? "No credits left!" : "Running low on credits!"}
             </p>
           )}
         </div>
@@ -123,7 +125,7 @@ export function DashboardSidebar({ user }: { user: User }) {
           href="/pricing"
           className={cn(
             "flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-colors",
-            user.credits <= 3
+            liveCredits <= 3
               ? "text-white bg-brand-500 hover:bg-brand-600"
               : "text-brand-700 bg-brand-50 hover:bg-brand-100"
           )}

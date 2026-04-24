@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useSWRConfig } from "swr";
 import { createClient } from "@/lib/supabase/client";
 import type { ExtractedLead, ExtractedEmail, OutreachType } from "@/types";
 import { ArrowLeft, Copy, ExternalLink, Mail, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
 
 const OUTREACH_TYPES: { key: OutreachType; label: string }[] = [
   { key: "proposal", label: "Proposal" },
@@ -18,6 +20,7 @@ const OUTREACH_TYPES: { key: OutreachType; label: string }[] = [
 export default function LeadDetailPage() {
   const params = useParams<{ id: string }>();
   const leadId = params?.id;
+  const { mutate } = useSWRConfig();
 
   const [lead, setLead] = useState<ExtractedLead | null>(null);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
@@ -92,6 +95,11 @@ export default function LeadDetailPage() {
 
       setSubject(payload.subject || "");
       setBody(payload.body || "");
+      if (typeof payload.remainingCredits === "number") {
+        void mutate(DASHBOARD_CREDITS_KEY, payload.remainingCredits, false);
+      } else {
+        void mutate(DASHBOARD_CREDITS_KEY);
+      }
       if ((lead.outreach_count ?? 0) === 0) {
         setShowFirstSuccess(true);
       }

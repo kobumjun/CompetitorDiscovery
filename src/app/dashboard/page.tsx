@@ -2,13 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { NewUserOnboarding } from "@/components/new-user-onboarding";
 import {
   FileText,
   Send,
   Target,
-  List,
   CheckCircle2,
   TrendingUp,
   ArrowRight,
@@ -18,7 +17,6 @@ import {
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { ExtractedLead, Proposal } from "@/types";
 import { formatCurrency } from "@/types";
-import type { User } from "@supabase/supabase-js";
 
 const STATUS_COLOR: Record<string, string> = {
   draft: "bg-surface-100 text-ink-600",
@@ -30,13 +28,13 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [recentLeads, setRecentLeads] = useState<ExtractedLead[]>([]);
   const [leadCount, setLeadCount] = useState(0);
   const [credits, setCredits] = useState<number | null>(null);
-  const [hasProfile, setHasProfile] = useState(true);
-  const [authUser, setAuthUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [quickUrls, setQuickUrls] = useState("");
 
   useEffect(() => {
     async function fetchData() {
@@ -45,20 +43,14 @@ export default function DashboardPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      setAuthUser(user);
 
-      const [proposalsRes, profileRes, creditsRes, leadCountRes, recentLeadsRes] = await Promise.all([
+      const [proposalsRes, creditsRes, leadCountRes, recentLeadsRes] = await Promise.all([
         supabase
           .from("proposals")
           .select("*, client:clients(*)")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(3),
-        supabase
-          .from("business_profiles")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle(),
         supabase.from("users").select("credits").eq("id", user.id).single(),
         supabase
           .from("extracted_leads")
@@ -73,7 +65,6 @@ export default function DashboardPage() {
       ]);
 
       if (proposalsRes.data) setProposals(proposalsRes.data as Proposal[]);
-      if (!profileRes.data) setHasProfile(false);
       if (creditsRes.data) setCredits(creditsRes.data.credits);
       setLeadCount(leadCountRes.count ?? 0);
       if (recentLeadsRes.data) setRecentLeads(recentLeadsRes.data as ExtractedLead[]);
@@ -88,8 +79,13 @@ export default function DashboardPage() {
   const winRate = total > 0 ? Math.round((accepted / total) * 100) : 0;
   const hasCreatedAnything = leadCount > 0 || proposals.length > 0;
 
-  if (!loading && authUser && !hasCreatedAnything) {
-    return <NewUserOnboarding user={authUser} />;
+  function goToQuickExtract() {
+    const cleaned = quickUrls.trim();
+    if (!cleaned) {
+      router.push("/dashboard/find-contacts");
+      return;
+    }
+    router.push(`/dashboard/find-contacts?urls=${encodeURIComponent(cleaned)}`);
   }
 
   return (
@@ -101,55 +97,47 @@ export default function DashboardPage() {
         <p className="text-ink-500 mt-1">Your proposal command center</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
-        <Link
-          href="/dashboard/find-contacts"
-          className="card-hover p-5 border-brand-200 bg-brand-50"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Target className="w-5 h-5 text-brand-600" />
-              <h3 className="text-base font-bold text-ink-900">Find Contacts</h3>
-            </div>
-            <ArrowRight className="w-4 h-4 text-brand-600" />
+      <section
+        className={cn(
+          "mb-8 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white",
+          hasCreatedAnything ? "p-5 sm:p-6" : "p-6 sm:p-8"
+        )}
+      >
+        <div className={cn("mx-auto", hasCreatedAnything ? "max-w-3xl" : "max-w-3xl")}>
+          <div className="flex items-center gap-2 text-brand-700 text-xs font-semibold uppercase tracking-wide">
+            <Target className="w-4 h-4" />
+            Prospecting Fast Lane
           </div>
-          <p className="text-sm text-ink-600 mt-2">Paste a URL to extract contact emails</p>
-        </Link>
-        <Link
-          href="/dashboard/find-contacts?mode=bulk"
-          className="card-hover p-5"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <List className="w-5 h-5 text-ink-700" />
-              <h3 className="text-base font-bold text-ink-900">Bulk Discovery</h3>
-              <span className="badge bg-brand-50 text-brand-700">NEW</span>
-            </div>
-            <ArrowRight className="w-4 h-4 text-ink-400" />
-          </div>
-          <p className="text-sm text-ink-500 mt-2">Extract emails from multiple sites at once</p>
-        </Link>
-        <Link
-          href="/dashboard/proposals/new"
-          className="card-hover p-5"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-ink-700" />
-              <h3 className="text-base font-bold text-ink-900">Create Proposal</h3>
-            </div>
-            <ArrowRight className="w-4 h-4 text-ink-400" />
-          </div>
-          <p className="text-sm text-ink-500 mt-2">Generate a full project proposal with timeline and pricing</p>
-        </Link>
-      </div>
+          <h2 className={cn("mt-3 font-black text-ink-900", hasCreatedAnything ? "text-2xl sm:text-3xl" : "text-3xl sm:text-4xl")}>
+            Got a list of prospects? Extract all their emails in 60 seconds.
+          </h2>
+          <p className="mt-2 text-sm sm:text-base text-ink-600">
+            Paste up to 20 company URLs and we&apos;ll find their contact emails — ready for outreach.
+          </p>
+          <textarea
+            className={cn("input-field mt-4", hasCreatedAnything ? "min-h-32" : "min-h-44")}
+            placeholder="Paste URLs here, one per line..."
+            value={quickUrls}
+            onChange={(e) => setQuickUrls(e.target.value)}
+          />
+          <button
+            className="mt-3 inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+            onClick={goToQuickExtract}
+          >
+            Extract Emails Now
+            <ArrowRight className="w-4 h-4 ml-1.5" />
+          </button>
+        </div>
+      </section>
 
-      <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
-        <StatCard icon={FileText} label="Total Proposals" value={total} />
-        <StatCard icon={Send} label="Sent" value={sent} />
-        <StatCard icon={CheckCircle2} label="Accepted" value={accepted} color="text-emerald-600" />
-        <StatCard icon={TrendingUp} label="Win Rate" value={`${winRate}%`} />
-      </div>
+      {hasCreatedAnything && (
+        <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+          <StatCard icon={FileText} label="Total Proposals" value={total} />
+          <StatCard icon={Send} label="Sent" value={sent} />
+          <StatCard icon={CheckCircle2} label="Accepted" value={accepted} color="text-emerald-600" />
+          <StatCard icon={TrendingUp} label="Win Rate" value={`${winRate}%`} />
+        </div>
+      )}
 
       {credits !== null && (
         <div

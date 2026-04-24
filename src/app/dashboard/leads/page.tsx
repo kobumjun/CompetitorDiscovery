@@ -1,14 +1,16 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useSWRConfig } from "swr";
 import { createClient } from "@/lib/supabase/client";
 import type { ExtractedLead, OutreachType } from "@/types";
-import { ChevronDown, ChevronRight, Copy, Download, Globe, Grid3X3, Mail, Plus, Sparkles } from "lucide-react";
+import { ChevronDown, Copy, Download, Globe, Grid3X3, Mail, Plus, Sparkles, X } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { ListPagination, LIST_PAGE_SIZE } from "@/components/list-pagination";
+import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
 
 async function fetchLeadsDashboard(): Promise<{ leads: ExtractedLead[]; credits: number }> {
   const supabase = createClient();
@@ -62,13 +64,11 @@ const OUTREACH_TYPES: { key: OutreachType; label: string }[] = [
 ];
 
 export default function LeadsPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const initialMode = searchParams.get("mode") === "bulk" ? "bulk" : "single";
+  const { mutate: mutateGlobal } = useSWRConfig();
+  const autoExtractRanRef = useRef(false);
 
-  const [mode, setMode] = useState<"single" | "bulk">(initialMode);
   const [listPage, setListPage] = useState(1);
-  const [url, setUrl] = useState("");
   const [bulkInput, setBulkInput] = useState("");
   const { data: leadsData, isLoading: bootLoading, mutate } = useSWR(
     "dashboard-extracted-leads",
@@ -95,7 +95,7 @@ export default function LeadsPage() {
   const [bulkResult, setBulkResult] = useState<BulkResponse | null>(null);
   const [failedOpen, setFailedOpen] = useState(false);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
-  const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
+  const [activeRow, setActiveRow] = useState<BulkLeadResult | null>(null);
   const [bulkOutreachType, setBulkOutreachType] = useState<OutreachType>("proposal");
   const [bulkWriteMode, setBulkWriteMode] = useState<"ai" | "manual">("manual");
   const [bulkContext, setBulkContext] = useState("");
@@ -120,15 +120,10 @@ export default function LeadsPage() {
   }, []);
 
   useEffect(() => {
-    const modeParam = searchParams.get("mode");
-    if (modeParam === "bulk") setMode("bulk");
+    const prefillUrls = searchParams.get("urls");
+    if (!prefillUrls || autoExtractRanRef.current) return;
+    setBulkInput(prefillUrls);
   }, [searchParams]);
-
-  function setModeAndUrl(nextMode: "single" | "bulk") {
-    setMode(nextMode);
-    const nextUrl = nextMode === "bulk" ? "/dashboard/find-contacts?mode=bulk" : "/dashboard/find-contacts";
-    router.replace(nextUrl);
-  }
 
   function parseBulkUrls(input: string): string[] {
     const rows = input
@@ -152,6 +147,13 @@ export default function LeadsPage() {
   const selectedBulkRows = bulkResult?.leads.filter((row) => selectedEmails.has(row.email)) ?? [];
 
   useEffect(() => {
+    const prefillUrls = searchParams.get("urls");
+    if (!prefillUrls || autoExtractRanRef.current || loading || validBulkUrls.length === 0) return;
+    autoExtractRanRef.current = true;
+    void handleBulkExtract();
+  }, [searchParams, loading, validBulkUrls.length]);
+
+  useEffect(() => {
     if (validBulkUrls.length > 20) {
       setBulkError("Max 20 URLs per batch. Please reduce the list.");
     } else {
@@ -165,33 +167,6 @@ export default function LeadsPage() {
       setBulkWarning(null);
     }
   }, [credits, validBulkUrls.length]);
-
-  async function handleExtract() {
-    if (!url.trim()) return;
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/leads/extract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        setError(payload.message || payload.error || "Extraction failed");
-        return;
-      }
-
-      setUrl("");
-      await mutate();
-      setListPage(1);
-    } catch {
-      setError("Unexpected error while extracting emails.");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleBulkExtract() {
     if (validBulkUrls.length === 0 || bulkError) return;
@@ -213,6 +188,9 @@ export default function LeadsPage() {
       setBulkResult(payload);
       if (payload.failed && payload.failed.length > 0) {
         setFailedOpen(false);
+      }
+      if (typeof payload.creditsRemaining === "number") {
+        void mutateGlobal(DASHBOARD_CREDITS_KEY, payload.creditsRemaining, false);
       }
       await mutate();
       setListPage(1);
@@ -236,17 +214,18 @@ export default function LeadsPage() {
     return `${row.lead_id}:${row.email}`;
   }
 
-  function expandRow(row: BulkLeadResult, preselect?: "ai" | "manual") {
-    const key = getRowKey(row);
-    if (expandedRowKey === key && !preselect) {
-      setExpandedRowKey(null);
-      return;
-    }
-    setExpandedRowKey(key);
-    setBulkWriteMode(preselect ?? "manual");
+  function openWriteModal(row: BulkLeadResult, preselect: "ai" | "manual" = "manual") {
+    setActiveRow(row);
+    setBulkWriteMode(preselect);
     setBulkContext("");
     setBulkSubject("");
     setBulkBody("");
+    setBulkActionError(null);
+    setBulkNotice(null);
+  }
+
+  function closeWriteModal() {
+    setActiveRow(null);
     setBulkActionError(null);
     setBulkNotice(null);
   }
@@ -309,6 +288,9 @@ export default function LeadsPage() {
       setBulkSubject(generatedSubject);
       setBulkBody(generatedBody);
       openRowMailto(row, generatedSubject, generatedBody);
+      if (typeof payload.remainingCredits === "number") {
+        void mutateGlobal(DASHBOARD_CREDITS_KEY, payload.remainingCredits, false);
+      }
       await mutate();
     } catch {
       setBulkActionError("Unexpected error while generating outreach.");
@@ -346,91 +328,47 @@ export default function LeadsPage() {
       <div className="mb-8">
         <h1 className="text-display font-bold text-ink-900">Find Contacts</h1>
         <p className="text-ink-500 mt-1">
-          Extract contacts from any website and generate personalized outreach.
+          Paste any company URLs to extract their contact emails — up to 20 at once.
         </p>
       </div>
 
       <div className="card p-4 mb-6">
-        <div className="inline-flex rounded-lg border border-surface-200 bg-surface-50 p-1 mb-4">
-          <button
-            onClick={() => setModeAndUrl("single")}
-            className={`px-3 py-1.5 text-sm rounded-md ${mode === "single" ? "bg-white text-ink-900 shadow-sm" : "text-ink-500"}`}
-          >
-            Single Site (1 credit)
-          </button>
-          <button
-            onClick={() => setModeAndUrl("bulk")}
-            className={`px-3 py-1.5 text-sm rounded-md ${mode === "bulk" ? "bg-white text-ink-900 shadow-sm" : "text-ink-500"}`}
-          >
-            Bulk Discovery (1 credit per email found)
-          </button>
-        </div>
-
-        {mode === "single" ? (
-          <>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="url"
-                className="input-field"
-                placeholder="https://example.com"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-              />
-              <button
-                onClick={handleExtract}
-                disabled={loading || !url.trim()}
-                className="btn-primary sm:min-w-[170px]"
-              >
-                <Sparkles className="w-4 h-4" />
-                {loading ? "Extracting..." : "Find Contacts"}
-              </button>
-            </div>
-            <p className="text-xs text-ink-400 mt-3">
-              1 credit per extraction. Tip: use this for businesses you have a genuine reason to contact.
-            </p>
-            {loading && (
-              <div className="mt-3 rounded-lg border border-surface-200 bg-surface-50 p-3">
-                {progressSteps.map((step, idx) => (
-                  <div key={step} className="text-xs text-ink-500 py-0.5">
-                    {idx < 2 ? "●" : "○"} {step}
-                  </div>
-                ))}
+        <label className="text-sm font-medium text-ink-700 mb-2 block">
+          Paste website URLs (one per line, max 20)
+        </label>
+        <textarea
+          className="input-field min-h-[180px]"
+          placeholder="Paste URLs here, one per line..."
+          value={bulkInput}
+          onChange={(e) => setBulkInput(e.target.value)}
+        />
+        <p className="mt-2 text-xs text-ink-500">
+          We&apos;ll crawl each site and extract contact emails. Costs 1 credit per email found.
+        </p>
+        <p className="mt-1 text-xs text-brand-700">{validBulkUrls.length} valid URLs detected</p>
+        {bulkWarning && <p className="mt-2 text-xs text-amber-700">{bulkWarning}</p>}
+        {bulkError && <p className="mt-2 text-sm text-red-600">{bulkError}</p>}
+        <button
+          onClick={handleBulkExtract}
+          disabled={loading || validBulkUrls.length === 0 || credits <= 0 || Boolean(bulkError)}
+          className="btn-primary mt-3"
+        >
+          <Grid3X3 className="w-4 h-4" />
+          {loading ? "Extracting..." : "Extract Emails"}
+        </button>
+        {loading && (
+          <div className="mt-3 rounded-lg border border-surface-200 bg-surface-50 p-3">
+            {progressSteps.map((step, idx) => (
+              <div key={step} className="text-xs text-ink-500 py-0.5">
+                {idx < 2 ? "●" : "○"} {step}
               </div>
-            )}
-            {error && (
-              <p className="text-sm text-red-600 mt-3">{error}</p>
-            )}
-          </>
-        ) : (
-          <>
-            <label className="text-sm font-medium text-ink-700 mb-2 block">
-              Paste website URLs (one per line, max 20)
-            </label>
-            <textarea
-              className="input-field min-h-[180px]"
-              placeholder={"https://example1.com\nhttps://example2.com\nhttps://example3.com"}
-              value={bulkInput}
-              onChange={(e) => setBulkInput(e.target.value)}
-            />
-            <p className="mt-2 text-xs text-ink-500">
-              We&apos;ll crawl each site and extract contact emails. Costs 1 credit per email found.
-            </p>
-            <p className="mt-1 text-xs text-brand-700">{validBulkUrls.length} valid URLs detected</p>
-            {bulkWarning && <p className="mt-2 text-xs text-amber-700">{bulkWarning}</p>}
-            {bulkError && <p className="mt-2 text-sm text-red-600">{bulkError}</p>}
-            <button
-              onClick={handleBulkExtract}
-              disabled={loading || validBulkUrls.length === 0 || credits <= 0 || Boolean(bulkError)}
-              className="btn-primary mt-3"
-            >
-              <Grid3X3 className="w-4 h-4" />
-              {loading ? "Extracting..." : "Extract Emails"}
-            </button>
-          </>
+            ))}
+          </div>
         )}
+        {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
       </div>
 
-      {mode === "bulk" && bulkResult && (
+      {bulkResult && (
         <div className="card p-4 mb-6">
           <div className="text-sm text-emerald-700 font-medium">
             ✓ Processed {bulkResult.successfulUrls} of {bulkResult.totalUrls} sites — Found {bulkResult.emailsFound} unique emails — {bulkResult.creditsUsed} credits used
@@ -474,174 +412,40 @@ export default function LeadsPage() {
                   </thead>
                   <tbody>
                     {bulkResult.leads.map((row) => {
-                      const rowKey = getRowKey(row);
-                      const expanded = expandedRowKey === rowKey;
                       return (
-                        <Fragment key={rowKey}>
-                          <tr
-                            className={cn("border-b border-surface-100 cursor-pointer", expanded && "bg-gray-50")}
-                            onClick={() => expandRow(row)}
-                          >
-                            <td className="py-2 pr-2">
-                              <div className="flex items-center gap-2">
-                                {expanded ? <ChevronDown className="w-4 h-4 text-ink-500" /> : <ChevronRight className="w-4 h-4 text-ink-500" />}
-                                <input
-                                  type="checkbox"
-                                  checked={selectedEmails.has(row.email)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={() => toggleRow(row.email)}
-                                />
-                              </div>
-                            </td>
-                            <td className="py-2 pr-2 text-ink-800">{row.email}</td>
-                            <td className="py-2 pr-2 text-ink-700">{row.company_name}</td>
-                            <td className="py-2 pr-2">
-                              <a
-                                className="text-brand-600 hover:underline"
-                                href={row.source_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()}
+                        <tr key={getRowKey(row)} className="border-b border-surface-100">
+                          <td className="py-2 pr-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedEmails.has(row.email)}
+                              onChange={() => toggleRow(row.email)}
+                            />
+                          </td>
+                          <td className="py-2 pr-2 text-ink-800">{row.email}</td>
+                          <td className="py-2 pr-2 text-ink-700">{row.company_name}</td>
+                          <td className="py-2 pr-2">
+                            <a className="text-brand-600 hover:underline" href={row.source_url} target="_blank" rel="noreferrer">
+                              {row.source_url}
+                            </a>
+                          </td>
+                          <td className="py-2">
+                            <div className="flex items-center gap-1">
+                              <button className="btn-ghost text-xs" onClick={() => openWriteModal(row, "manual")}>
+                                Write Email
+                              </button>
+                              <button
+                                className="p-1.5 text-ink-500 hover:text-ink-700"
+                                onClick={() => void navigator.clipboard.writeText(row.email)}
+                                title="Copy Email"
                               >
-                                {row.source_url}
+                                <Copy className="w-4 h-4" />
+                              </button>
+                              <a href={`mailto:${row.email}`} className="p-1.5 text-ink-500 hover:text-ink-700" title="Open in Mail">
+                                <Mail className="w-4 h-4" />
                               </a>
-                            </td>
-                            <td className="py-2">
-                              <div className="flex items-center gap-1">
-                                <button
-                                  className="btn-ghost text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    expandRow(row, "ai");
-                                  }}
-                                >
-                                  Generate Proposal
-                                </button>
-                                <button
-                                  className="p-1.5 text-ink-500 hover:text-ink-700"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void navigator.clipboard.writeText(row.email);
-                                  }}
-                                  title="Copy Email"
-                                >
-                                  <Copy className="w-4 h-4" />
-                                </button>
-                                <a
-                                  href={`mailto:${row.email}`}
-                                  className="p-1.5 text-ink-500 hover:text-ink-700"
-                                  title="Open in Mail"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Mail className="w-4 h-4" />
-                                </a>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr className="bg-gray-50 border-b border-surface-100">
-                            <td colSpan={5} className="p-0">
-                              <div
-                                className={cn(
-                                  "overflow-hidden transition-all duration-200",
-                                  expanded ? "max-h-[560px] border-t border-surface-200" : "max-h-0"
-                                )}
-                              >
-                                <div className="p-4 sm:p-5">
-                                  <div className="text-xs text-ink-600 mb-3">
-                                    {row.email} | {row.company_name} | {row.source_url}
-                                  </div>
-
-                                  <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
-                                    <div className="text-sm font-medium text-ink-800">Choose proposal type:</div>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                      {OUTREACH_TYPES.map((item) => (
-                                        <button
-                                          key={item.key}
-                                          type="button"
-                                          onClick={() => setBulkOutreachType(item.key)}
-                                          className={cn(
-                                            "btn-secondary text-xs justify-center",
-                                            bulkOutreachType === item.key && "bg-brand-50 border-brand-300 text-brand-700"
-                                          )}
-                                        >
-                                          {item.label}
-                                        </button>
-                                      ))}
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => setBulkWriteMode("manual")}
-                                        className={cn(
-                                          "btn-secondary justify-center",
-                                          bulkWriteMode === "manual" && "bg-brand-50 border-brand-300 text-brand-700"
-                                        )}
-                                      >
-                                        ✍️ Write manually (free)
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setBulkWriteMode("ai")}
-                                        className={cn(
-                                          "btn-secondary justify-center",
-                                          bulkWriteMode === "ai" && "bg-brand-50 border-brand-300 text-brand-700"
-                                        )}
-                                      >
-                                        ✨ Generate with AI (1 credit)
-                                      </button>
-                                    </div>
-
-                                    {bulkWriteMode === "ai" ? (
-                                      <div className="space-y-2">
-                                        <textarea
-                                          className="input-field min-h-24"
-                                          value={bulkContext}
-                                          onChange={(e) => setBulkContext(e.target.value)}
-                                          placeholder="Specific context for this outreach..."
-                                        />
-                                        <button
-                                          className="btn-primary"
-                                          onClick={() => handleGenerateBulkAi(row)}
-                                          disabled={bulkGenerating}
-                                        >
-                                          <Sparkles className="w-4 h-4" />
-                                          {bulkGenerating ? "Generating..." : "Generate & Open Mail"}
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <div className="space-y-2">
-                                        <input
-                                          className="input-field"
-                                          value={bulkSubject}
-                                          onChange={(e) => setBulkSubject(e.target.value)}
-                                          placeholder="Email subject line"
-                                        />
-                                        <textarea
-                                          className="input-field min-h-36"
-                                          value={bulkBody}
-                                          onChange={(e) => setBulkBody(e.target.value)}
-                                          placeholder="Write your email here..."
-                                        />
-                                        <button
-                                          className="btn-primary"
-                                          onClick={() => handleOpenManual(row)}
-                                          disabled={!bulkSubject.trim() || !bulkBody.trim()}
-                                        >
-                                          <Mail className="w-4 h-4" />
-                                          Open in Mail
-                                        </button>
-                                      </div>
-                                    )}
-
-                                    {bulkActionError && <p className="text-sm text-red-600">{bulkActionError}</p>}
-                                    {bulkNotice && <p className="text-sm text-emerald-700">{bulkNotice}</p>}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        </Fragment>
+                            </div>
+                          </td>
+                        </tr>
                       );
                     })}
                   </tbody>
@@ -668,6 +472,114 @@ export default function LeadsPage() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {activeRow && (
+        <div className="fixed inset-0 z-50 bg-ink-900/40 p-4 sm:p-8" onClick={closeWriteModal}>
+          <div
+            className="mx-auto max-w-2xl rounded-xl border border-surface-200 bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-ink-900">Write Email</h3>
+                <p className="text-xs text-ink-500 mt-1">
+                  {activeRow.email} | {activeRow.company_name}
+                </p>
+              </div>
+              <button
+                className="rounded-lg p-1.5 text-ink-500 hover:bg-surface-100 hover:text-ink-700"
+                onClick={closeWriteModal}
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
+              <div className="text-sm font-medium text-ink-800">Choose email type:</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {OUTREACH_TYPES.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setBulkOutreachType(item.key)}
+                    className={cn(
+                      "btn-secondary text-xs justify-center",
+                      bulkOutreachType === item.key && "bg-brand-50 border-brand-300 text-brand-700"
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBulkWriteMode("manual")}
+                  className={cn(
+                    "btn-secondary justify-center",
+                    bulkWriteMode === "manual" && "bg-brand-50 border-brand-300 text-brand-700"
+                  )}
+                >
+                  ✍️ Write manually (free)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBulkWriteMode("ai")}
+                  className={cn(
+                    "btn-secondary justify-center",
+                    bulkWriteMode === "ai" && "bg-brand-50 border-brand-300 text-brand-700"
+                  )}
+                >
+                  ✨ Generate with AI (1 credit)
+                </button>
+              </div>
+
+              {bulkWriteMode === "ai" ? (
+                <div className="space-y-2">
+                  <textarea
+                    className="input-field min-h-24"
+                    value={bulkContext}
+                    onChange={(e) => setBulkContext(e.target.value)}
+                    placeholder="Specific context for this outreach..."
+                  />
+                  <button className="btn-primary" onClick={() => handleGenerateBulkAi(activeRow)} disabled={bulkGenerating}>
+                    <Sparkles className="w-4 h-4" />
+                    {bulkGenerating ? "Generating..." : "Generate & Open Mail"}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    className="input-field"
+                    value={bulkSubject}
+                    onChange={(e) => setBulkSubject(e.target.value)}
+                    placeholder="Email subject line"
+                  />
+                  <textarea
+                    className="input-field min-h-36"
+                    value={bulkBody}
+                    onChange={(e) => setBulkBody(e.target.value)}
+                    placeholder="Write your email here..."
+                  />
+                  <button
+                    className="btn-primary"
+                    onClick={() => handleOpenManual(activeRow)}
+                    disabled={!bulkSubject.trim() || !bulkBody.trim()}
+                  >
+                    <Mail className="w-4 h-4" />
+                    Open in Mail
+                  </button>
+                </div>
+              )}
+
+              {bulkActionError && <p className="text-sm text-red-600">{bulkActionError}</p>}
+              {bulkNotice && <p className="text-sm text-emerald-700">{bulkNotice}</p>}
+            </div>
+          </div>
         </div>
       )}
 
@@ -701,7 +613,7 @@ export default function LeadsPage() {
             </div>
           </div>
           <div className="text-center mt-4">
-            <button onClick={() => setUrl("https://")} className="btn-secondary">
+            <button onClick={() => setBulkInput("https://")} className="btn-secondary">
               <Plus className="w-4 h-4" /> Try your first extraction
             </button>
           </div>

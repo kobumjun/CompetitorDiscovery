@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useSWRConfig } from "swr";
 import { createClient } from "@/lib/supabase/client";
 import {
   ArrowLeft,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Client, ProposalTone, BusinessProfile } from "@/types";
+import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
 
 const SECTIONS = [
   "Cover Letter",
@@ -29,6 +31,7 @@ const SECTIONS = [
 export default function NewProposalPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { mutate } = useSWRConfig();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -140,6 +143,13 @@ export default function NewProposalPage() {
         setError(data.error || "Failed to generate proposal");
         setLoading(false);
         return;
+      }
+
+      if (typeof data.remainingCredits === "number") {
+        setCredits(data.remainingCredits);
+        void mutate(DASHBOARD_CREDITS_KEY, data.remainingCredits, false);
+      } else {
+        void mutate(DASHBOARD_CREDITS_KEY);
       }
 
       router.push(`/dashboard/proposals/${data.proposal.id}`);
