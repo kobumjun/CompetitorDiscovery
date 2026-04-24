@@ -16,11 +16,11 @@ export const metadata: Metadata = {
 const FAQS = [
   {
     q: "What counts as one credit?",
-    a: "One credit = one AI-generated proposal. You describe the project and AI creates a full proposal with cover letter, scope, pricing, timeline, and terms.",
+    a: "One credit is used when you generate an AI pitch email or extract one contact email from a found prospect.",
   },
   {
-    q: "Can I edit proposals after generation?",
-    a: "Yes! Every section of the proposal is fully editable. Click any section to modify it. The AI gives you a strong starting point; you make it perfect.",
+    q: "Can I edit emails after generation?",
+    a: "Yes. AI-generated subject and body are fully editable before you open them in your email client.",
   },
   {
     q: "Can I cancel anytime?",
@@ -54,7 +54,7 @@ export default function PricingPage() {
             Simple, transparent pricing
           </h1>
           <p className="text-lg text-ink-500">
-            Start with 5 free proposals. Upgrade when you need more.
+            Start with 5 free credits. Upgrade when you need more.
           </p>
         </div>
       </section>
@@ -70,10 +70,15 @@ export default function PricingPage() {
                   <span className="text-4xl font-black text-ink-900">$0</span>
                   <span className="text-sm text-ink-400">/mo</span>
                 </div>
-                <div className="mt-1 text-sm text-ink-500">5 proposals</div>
+                <div className="mt-1 text-sm text-ink-500">5 credits</div>
               </div>
               <ul className="space-y-3 mb-8 flex-1">
-                {["5 AI proposals", "All sections", "Share links", "View tracking"].map((f) => (
+                {[
+                  "5 AI-powered emails",
+                  "Keyword search to find prospects",
+                  "Email extraction",
+                  "View tracking",
+                ].map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
                     <Check className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />{f}
                   </li>
@@ -98,10 +103,29 @@ export default function PricingPage() {
                     <span className="text-4xl font-black text-ink-900">${plan.price}</span>
                     <span className="text-sm text-ink-400">/mo</span>
                   </div>
-                  <div className="mt-1 text-sm text-ink-500">{plan.credits} proposals · {plan.pricePerCredit}/each</div>
+                  <div className="mt-1 text-sm text-ink-500">{plan.credits} credits · {plan.pricePerCredit}/each</div>
                 </div>
                 <ul className="space-y-3 mb-8 flex-1">
-                  {plan.features.map((f) => (
+                  {(plan.type === "pro"
+                    ? [
+                        "50 credits / month",
+                        "Keyword prospect search",
+                        "Bulk URL extraction (up to 20)",
+                        "AI pitch generation (GPT-4o)",
+                        "Unlimited clients",
+                        "Shareable proposal links",
+                        "View & engagement tracking",
+                        "PDF export",
+                        "Custom branding",
+                      ]
+                    : [
+                        "200 credits / month",
+                        "Everything in Pro",
+                        "Priority AI generation",
+                        "Custom templates library",
+                        "Bulk prospect management",
+                        "Priority support",
+                      ]).map((f) => (
                     <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
                       <Check className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />{f}
                     </li>
@@ -119,9 +143,9 @@ export default function PricingPage() {
           <h2 className="text-heading font-bold text-ink-900 mb-8">Included in every plan</h2>
           <div className="grid sm:grid-cols-3 gap-6">
             {[
-              { icon: Zap, title: "AI Generation (GPT-4o)", desc: "Professional proposals in seconds" },
+              { icon: Zap, title: "AI Generation (GPT-4o)", desc: "Personalized outreach emails in seconds" },
               { icon: Shield, title: "Electronic Signatures", desc: "Clients sign directly online" },
-              { icon: RefreshCcw, title: "Full Edit Control", desc: "Edit every section after generation" },
+              { icon: RefreshCcw, title: "Full Edit Control", desc: "Edit every email before sending" },
             ].map((item) => (
               <div key={item.title} className="text-center">
                 <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center mx-auto mb-3">

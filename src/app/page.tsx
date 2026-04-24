@@ -49,14 +49,15 @@ export default function LandingPage() {
         <div className="relative max-w-4xl mx-auto px-5 sm:px-6 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-50 border border-brand-200 rounded-full text-xs font-semibold text-brand-700 mb-6">
             <Zap className="w-3.5 h-3.5" />
-            Website to outreach automation
+            Outreach on autopilot
           </div>
           <h1 className="mb-6 font-black text-ink-900 [font-size:clamp(2.5rem,9vw,3.25rem)] leading-[1.13] tracking-[-0.025em] [word-break:keep-all] [overflow-wrap:break-word] [hyphens:none] px-4 sm:px-0 max-[480px]:[font-size:clamp(2.25rem,8.5vw,2.75rem)] max-[480px]:leading-[1.1] md:text-display-xl md:leading-tight">
-            Found a company you want to reach? Get their email and pitch them in 60 seconds.
+            Describe who you want to reach.
+            <span className="block md:inline"> We find them, get their email, and write your pitch.</span>
           </h1>
           <p className="text-lg md:text-xl text-ink-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Paste the URL. ProposalPilot extracts the contact email and writes a personalized pitch
-            based on what they actually do. Your email client opens ready to send.
+            Type a keyword like &ldquo;marketing agencies in London&rdquo; — ProposalPilot finds companies,
+            extracts contact emails, and generates a personalized pitch with AI. Ready to send in 60 seconds.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
             <Link href="/signup" className="btn-primary text-base px-8 py-3">
@@ -76,11 +77,11 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto px-6">
           <div className="text-center mb-8">
             <h2 className="text-heading font-bold text-ink-900 mb-2">
-              Got a list? Extract them all at once.
+              Already have a list of prospects?
             </h2>
             <p className="text-sm text-ink-500 max-w-2xl mx-auto">
-              Paste up to 20 URLs. ProposalPilot crawls every site, extracts all contact emails,
-              and lets you generate a personalized pitch for each — from one page.
+              Paste up to 20 URLs and extract all their contact emails at once.
+              Write and send personalized pitches — all from one page.
             </p>
           </div>
           <div className="grid grid-cols-2 max-[480px]:grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
@@ -115,20 +116,20 @@ export default function LandingPage() {
               {
                 step: "01",
                 icon: PenTool,
-                title: "Paste any website URL",
-                desc: "Found a potential client, partner, or investor? Drop their website URL.",
+                title: "Describe your target",
+                desc: "Type keywords like 'SaaS startups' or 'yoga studios in NYC'. Or paste URLs directly if you already have a list.",
               },
               {
                 step: "02",
                 icon: Sparkles,
-                title: "We extract the contact email",
-                desc: "ProposalPilot crawls the site and finds publicly listed contact emails automatically.",
+                title: "We find companies & extract emails",
+                desc: "ProposalPilot searches the web, finds matching companies, and extracts their contact emails automatically.",
               },
               {
                 step: "03",
                 icon: Send,
                 title: "AI writes your pitch, you hit send",
-                desc: "Choose your outreach type — proposal, sales pitch, investment ask, or quote. GPT-4o writes a personalized email. Your mail app opens ready to go.",
+                desc: "Choose your outreach type — proposal, sales pitch, investment ask, or quote. AI writes a personalized email based on what the company actually does. Your mail app opens ready to go.",
               },
             ].map((item) => (
               <div key={item.step} className="relative">
@@ -263,7 +264,7 @@ export default function LandingPage() {
               Simple, transparent pricing
             </h2>
             <p className="text-ink-500">
-              Start with 5 free proposals. Upgrade when you need more.
+              Start with 5 free credits. Upgrade when you need more.
             </p>
           </div>
 
@@ -276,12 +277,13 @@ export default function LandingPage() {
                   <span className="text-3xl font-black text-ink-900">$0</span>
                   <span className="text-sm text-ink-400">/mo</span>
                 </div>
-                <div className="mt-1 text-sm text-ink-500">5 proposals included</div>
+                <div className="mt-1 text-sm text-ink-500">5 credits included</div>
               </div>
               <ul className="space-y-3 mb-8 flex-1">
                 {[
-                  "5 AI-generated proposals",
-                  "All proposal sections",
+                  "5 AI-powered emails",
+                  "Keyword search to find prospects",
+                  "Email extraction",
                   "Shareable links",
                   "Basic view tracking",
                 ].map((f) => (
@@ -313,7 +315,7 @@ export default function LandingPage() {
                     <span className="text-sm text-ink-400">/mo</span>
                   </div>
                   <div className="mt-1 text-sm text-ink-500">
-                    {plan.credits} proposals · {plan.pricePerCredit}/each
+                    {plan.credits} credits · {plan.pricePerCredit}/each
                   </div>
                 </div>
                 <ul className="space-y-3 mb-8 flex-1">
@@ -340,11 +342,11 @@ export default function LandingPage() {
             Win more clients with less effort
           </h2>
           <p className="text-lg text-ink-500 mb-8 max-w-lg mx-auto">
-            Stop spending hours on proposals. Let AI do the heavy lifting so you
+            Stop spending hours on outreach. Let AI do the heavy lifting so you
             can focus on what you do best.
           </p>
           <Link href="/signup" className="btn-primary text-base px-8 py-3">
-            Start Free — 5 Proposals Included
+            Start Free — 5 Credits Included
             <ArrowRight className="w-5 h-5" />
           </Link>
           <p className="text-xs text-ink-400 mt-4">No credit card required</p>

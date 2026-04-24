@@ -538,7 +538,7 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     <strong className={cn("text-ink-900", credits <= 3 && "text-amber-800")}>{credits}</strong>{" "}
-                    proposal credit{credits !== 1 ? "s" : ""} remaining
+                    credit{credits !== 1 ? "s" : ""} remaining
                   </>
                 )}
               </span>
