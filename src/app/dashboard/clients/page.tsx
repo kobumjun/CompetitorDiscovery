@@ -1,14 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import { createClient } from "@/lib/supabase/client";
 import { Plus, Users, Pencil, Trash2, X, Loader2 } from "lucide-react";
 import type { Client } from "@/types";
+import { ListPagination, LIST_PAGE_SIZE } from "@/components/list-pagination";
+
+async function fetchClients(): Promise<Client[]> {
+  const res = await fetch("/api/clients");
+  if (!res.ok) return [];
+  return res.json();
+}
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: clients = [], isLoading: loading, mutate } = useSWR("dashboard-clients", fetchClients, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  });
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -19,18 +29,17 @@ export default function ClientsPage() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(clients.length / LIST_PAGE_SIZE));
 
-  async function fetchClients() {
-    const res = await fetch("/api/clients");
-    if (res.ok) {
-      const data = await res.json();
-      setClients(data);
-    }
-    setLoading(false);
-  }
+  useEffect(() => {
+    setPage((p) => Math.min(p, pageCount));
+  }, [pageCount, clients.length]);
+
+  const paginatedClients = useMemo(
+    () => clients.slice((page - 1) * LIST_PAGE_SIZE, page * LIST_PAGE_SIZE),
+    [clients, page]
+  );
 
   function resetForm() {
     setCompanyName("");
@@ -77,14 +86,14 @@ export default function ClientsPage() {
 
     resetForm();
     setSaving(false);
-    fetchClients();
+    await mutate();
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this client?")) return;
     const supabase = createClient();
     await supabase.from("clients").delete().eq("id", id);
-    setClients((prev) => prev.filter((c) => c.id !== id));
+    await mutate();
   }
 
   return (
@@ -139,7 +148,7 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {clients.map((c) => (
+          {paginatedClients.map((c) => (
             <div key={c.id} className="card p-5 flex items-center justify-between">
               <div>
                 <div className="text-sm font-medium text-ink-800">{c.company_name}</div>
@@ -164,6 +173,7 @@ export default function ClientsPage() {
               </div>
             </div>
           ))}
+          <ListPagination page={page} totalItems={clients.length} onPageChange={setPage} className="pt-4" />
         </div>
       )}
     </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import { createClient } from "@/lib/supabase/client";
 import {
   Plus,
@@ -9,12 +10,27 @@ import {
   Eye,
   Clock,
   Trash2,
-  Copy,
-  ArrowRight,
 } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { Proposal } from "@/types";
 import { formatCurrency } from "@/types";
+import { ListPagination, LIST_PAGE_SIZE } from "@/components/list-pagination";
+
+async function fetchProposals(): Promise<Proposal[]> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("proposals")
+    .select("*, client:clients(*)")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+
+  return (data as Proposal[]) || [];
+}
 
 const STATUS_COLOR: Record<string, string> = {
   draft: "bg-surface-100 text-ink-600",
@@ -28,47 +44,49 @@ const STATUS_COLOR: Record<string, string> = {
 const FILTERS = ["all", "draft", "sent", "viewed", "accepted", "rejected"] as const;
 
 export default function ProposalsPage() {
-  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const { data: proposals = [], isLoading: loading, mutate } = useSWR("dashboard-proposals", fetchProposals, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  });
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    async function fetchProposals() {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+    setPage(1);
+  }, [filter, search]);
 
-      const { data } = await supabase
-        .from("proposals")
-        .select("*, client:clients(*)")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+  const filtered = useMemo(
+    () =>
+      proposals.filter((p) => {
+        if (filter !== "all" && p.status !== filter) return false;
+        if (search) {
+          const q = search.toLowerCase();
+          return (
+            p.title.toLowerCase().includes(q) ||
+            (p.client as any)?.company_name?.toLowerCase().includes(q)
+          );
+        }
+        return true;
+      }),
+    [proposals, filter, search]
+  );
 
-      if (data) setProposals(data as Proposal[]);
-      setLoading(false);
-    }
-    fetchProposals();
-  }, []);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
 
-  const filtered = proposals.filter((p) => {
-    if (filter !== "all" && p.status !== filter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        p.title.toLowerCase().includes(q) ||
-        (p.client as any)?.company_name?.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  useEffect(() => {
+    setPage((p) => Math.min(p, pageCount));
+  }, [pageCount, filtered.length]);
+
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * LIST_PAGE_SIZE, page * LIST_PAGE_SIZE),
+    [filtered, page]
+  );
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this proposal?")) return;
     await fetch(`/api/proposals/${id}`, { method: "DELETE" });
-    setProposals((prev) => prev.filter((p) => p.id !== id));
+    await mutate();
   }
 
   return (
@@ -136,7 +154,7 @@ export default function ProposalsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((p) => (
+          {paginated.map((p) => (
             <div key={p.id} className="card-hover p-5 flex items-center justify-between">
               <Link href={`/dashboard/proposals/${p.id}`} className="min-w-0 flex-1 block">
                 <div className="text-sm font-medium text-ink-800 truncate">{p.title}</div>
@@ -171,6 +189,7 @@ export default function ProposalsPage() {
               </div>
             </div>
           ))}
+          <ListPagination page={page} totalItems={filtered.length} onPageChange={setPage} className="pt-4" />
         </div>
       )}
     </div>

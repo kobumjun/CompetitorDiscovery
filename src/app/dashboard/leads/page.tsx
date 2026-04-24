@@ -1,12 +1,36 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { ExtractedLead, OutreachType } from "@/types";
 import { ChevronDown, ChevronRight, Copy, Download, Globe, Grid3X3, Mail, Plus, Sparkles } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { ListPagination, LIST_PAGE_SIZE } from "@/components/list-pagination";
+
+async function fetchLeadsDashboard(): Promise<{ leads: ExtractedLead[]; credits: number }> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { leads: [], credits: 0 };
+
+  const [{ data }, creditsRes] = await Promise.all([
+    supabase
+      .from("extracted_leads")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase.from("users").select("credits").eq("id", user.id).single(),
+  ]);
+
+  return {
+    leads: (data ?? []) as ExtractedLead[],
+    credits: creditsRes.data?.credits ?? 0,
+  };
+}
 
 type BulkLeadResult = {
   email: string;
@@ -43,12 +67,28 @@ export default function LeadsPage() {
   const initialMode = searchParams.get("mode") === "bulk" ? "bulk" : "single";
 
   const [mode, setMode] = useState<"single" | "bulk">(initialMode);
-  const [credits, setCredits] = useState<number>(0);
+  const [listPage, setListPage] = useState(1);
   const [url, setUrl] = useState("");
   const [bulkInput, setBulkInput] = useState("");
-  const [leads, setLeads] = useState<ExtractedLead[]>([]);
+  const { data: leadsData, isLoading: bootLoading, mutate } = useSWR(
+    "dashboard-extracted-leads",
+    fetchLeadsDashboard,
+    { revalidateOnFocus: false, dedupingInterval: 60_000 }
+  );
+  const leads = leadsData?.leads ?? [];
+  const credits = leadsData?.credits ?? 0;
+  const listPageCount = Math.max(1, Math.ceil(leads.length / LIST_PAGE_SIZE));
+
+  useEffect(() => {
+    setListPage((p) => Math.min(p, listPageCount));
+  }, [listPageCount, leads.length]);
+
+  const pagedLeads = useMemo(
+    () => leads.slice((listPage - 1) * LIST_PAGE_SIZE, listPage * LIST_PAGE_SIZE),
+    [leads, listPage]
+  );
+
   const [loading, setLoading] = useState(false);
-  const [bootLoading, setBootLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkWarning, setBulkWarning] = useState<string | null>(null);
@@ -71,30 +111,6 @@ export default function LeadsPage() {
     "Extracting emails...",
     "Preparing results...",
   ];
-
-  async function fetchLeads() {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const [{ data }, creditsRes] = await Promise.all([
-      supabase
-        .from("extracted_leads")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-      supabase.from("users").select("credits").eq("id", user.id).single(),
-    ]);
-
-    setLeads((data ?? []) as ExtractedLead[]);
-    setCredits(creditsRes.data?.credits ?? 0);
-  }
-
-  useEffect(() => {
-    fetchLeads().finally(() => setBootLoading(false));
-  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -168,7 +184,8 @@ export default function LeadsPage() {
       }
 
       setUrl("");
-      await fetchLeads();
+      await mutate();
+      setListPage(1);
     } catch {
       setError("Unexpected error while extracting emails.");
     } finally {
@@ -197,7 +214,8 @@ export default function LeadsPage() {
       if (payload.failed && payload.failed.length > 0) {
         setFailedOpen(false);
       }
-      await fetchLeads();
+      await mutate();
+      setListPage(1);
     } catch {
       setBulkError("Unexpected error while extracting in bulk.");
     } finally {
@@ -291,7 +309,7 @@ export default function LeadsPage() {
       setBulkSubject(generatedSubject);
       setBulkBody(generatedBody);
       openRowMailto(row, generatedSubject, generatedBody);
-      await fetchLeads();
+      await mutate();
     } catch {
       setBulkActionError("Unexpected error while generating outreach.");
     } finally {
@@ -690,7 +708,7 @@ export default function LeadsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {leads.map((lead) => {
+          {pagedLeads.map((lead) => {
             const emails = Array.isArray(lead.emails) ? lead.emails : [];
             return (
               <Link
@@ -713,6 +731,7 @@ export default function LeadsPage() {
               </Link>
             );
           })}
+          <ListPagination page={listPage} totalItems={leads.length} onPageChange={setListPage} className="pt-2" />
         </div>
       )}
     </div>
