@@ -12,7 +12,7 @@ interface EmailCountStepperProps {
 }
 
 const MIN = 1;
-const ABS_MAX = 20;
+const ABS_MAX = 5;
 
 export function EmailCountStepper({
   value,

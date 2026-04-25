@@ -102,7 +102,7 @@ export function deriveCompanyNameFromHost(hostname: string): string {
 
 export async function extractWebsiteEmails(
   inputUrl: string,
-  options?: { timeoutMs?: number }
+  options?: { timeoutMs?: number; paths?: string[] }
 ): Promise<
   | {
       ok: true;
@@ -131,8 +131,9 @@ export async function extractWebsiteEmails(
 
   const baseUrl = `${parsed.protocol}//${parsed.host}`;
   const timeoutMs = options?.timeoutMs ?? 8000;
+  const pathsToCrawl = options?.paths ?? PATHS_TO_CRAWL;
   const crawled = await Promise.all(
-    PATHS_TO_CRAWL.map(async (path) => ({
+    pathsToCrawl.map(async (path) => ({
       path,
       html: await fetchPageContent(`${baseUrl}${path}`, timeoutMs),
     }))

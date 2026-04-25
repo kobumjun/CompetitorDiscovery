@@ -239,13 +239,11 @@ export default function LeadsPage() {
     setBulkResult(null);
     setSelectedEmails(new Set());
 
-    const timerA = setTimeout(() => setSmartProgress("Found companies. Extracting emails..."), 4000);
-    const timerB = setTimeout(() => setSmartProgress("Scanning more sites..."), 15000);
-    const timerC = setTimeout(() => setSmartProgress("Expanding search to find more results..."), 30000);
-    const timerD = setTimeout(() => setSmartProgress("Still searching... almost done"), 50000);
+    const timerA = setTimeout(() => setSmartProgress("Found companies. Extracting emails..."), 2000);
+    const timerB = setTimeout(() => setSmartProgress("Almost done..."), 5000);
     const counterTimer = setInterval(() => {
       setSmartCounter((prev) => Math.min(prev + 1, targetCount));
-    }, Math.max(2000, (targetCount * 3000) / targetCount));
+    }, 2000);
 
     try {
       const response = await fetch("/api/search-prospects", {
@@ -285,8 +283,6 @@ export default function LeadsPage() {
     } finally {
       clearTimeout(timerA);
       clearTimeout(timerB);
-      clearTimeout(timerC);
-      clearTimeout(timerD);
       clearInterval(counterTimer);
       setSmartLoading(false);
       setTimeout(() => setSmartProgress(null), 1200);
@@ -482,9 +478,6 @@ export default function LeadsPage() {
               <p className="text-xs text-ink-500">
                 Found {smartCounter} of {targetCount} emails...
               </p>
-            )}
-            {smartLoading && targetCount > 3 && (
-              <p className="text-xs text-ink-400">This may take up to a minute for larger requests.</p>
             )}
           </div>
         )}

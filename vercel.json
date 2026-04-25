@@ -1,8 +1,5 @@
 {
   "functions": {
-    "src/app/api/search-prospects/route.ts": {
-      "maxDuration": 120
-    },
     "src/app/api/find-contacts/bulk/route.ts": {
       "maxDuration": 120
     }
