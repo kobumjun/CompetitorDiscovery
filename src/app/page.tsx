@@ -385,6 +385,7 @@ export default function LandingPage() {
             <div className="flex items-center gap-6 text-sm text-ink-400">
               <a href="#features" className="hover:text-ink-700 transition-colors">Features</a>
               <a href="#pricing" className="hover:text-ink-700 transition-colors">Pricing</a>
+              <Link href="/privacy" className="hover:text-ink-700 transition-colors">Privacy</Link>
               <button type="button" onClick={startGoogleAuth} className="hover:text-ink-700 transition-colors">Login</button>
             </div>
           </div>

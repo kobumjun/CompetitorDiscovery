@@ -13,6 +13,9 @@ export function SiteFooter({ variant = "default" }: Props) {
         <Link href="/terms" className="text-[11px] text-ink-400 hover:text-brand-600">
           Terms of Service
         </Link>
+        <Link href="/privacy" className="text-[11px] text-ink-400 hover:text-brand-600">
+          Privacy Policy
+        </Link>
         <Link href="/refund-policy" className="text-[11px] text-ink-400 hover:text-brand-600">
           Refund Policy
         </Link>
@@ -34,6 +37,7 @@ export function SiteFooter({ variant = "default" }: Props) {
             <p className="text-sm font-semibold text-ink-800 mb-2">Legal</p>
             <nav className="flex flex-col gap-2">
               <Link href="/terms" className={link}>Terms of Service</Link>
+              <Link href="/privacy" className={link}>Privacy Policy</Link>
               <Link href="/refund-policy" className={link}>Refund Policy</Link>
               <Link href="/contact" className={link}>Contact</Link>
             </nav>
