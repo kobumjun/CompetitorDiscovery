@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -8,28 +8,45 @@ import { Rocket, Loader2, AlertCircle } from "lucide-react";
 
 export default function LoginPageClient() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function startGoogleAuth() {
     setError("");
     setLoading(true);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const supabase = createClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
 
-    if (error) {
-      setError(error.message);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?redirect=/dashboard`,
+        },
+      });
+
+      if (error) {
+        setError(error.message);
+      }
+    } catch {
+      setError("Google sign-in failed. Please try again.");
       setLoading(false);
       return;
     }
 
-    router.push("/dashboard");
-    router.refresh();
+    setLoading(false);
   }
+
+  useEffect(() => {
+    void startGoogleAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-screen bg-surface-50 flex items-center justify-center px-4">
@@ -39,13 +56,13 @@ export default function LoginPageClient() {
             <Rocket className="w-7 h-7 text-brand-500" strokeWidth={2.5} />
             <span className="text-xl font-bold text-ink-900">ProposalPilot</span>
           </Link>
-          <h1 className="text-heading font-bold text-ink-900">Welcome back</h1>
+          <h1 className="text-heading font-bold text-ink-900">Continue with Google</h1>
           <p className="text-sm text-ink-500 mt-1">
-            Sign in to your proposal workspace
+            We are opening Google sign-in now.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="card p-6 space-y-4">
+        <div className="card p-6 space-y-4">
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -53,25 +70,16 @@ export default function LoginPageClient() {
             </div>
           )}
 
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-ink-700 mb-1.5">Email</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input-field" placeholder="you@example.com" required />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-ink-700 mb-1.5">Password</label>
-            <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input-field" placeholder="••••••••" required />
-          </div>
-
-          <button type="submit" disabled={loading} className="btn-primary w-full">
-            {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in...</> : "Sign in"}
+          <button type="button" onClick={startGoogleAuth} disabled={loading} className="btn-primary w-full">
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Redirecting to Google...
+              </>
+            ) : (
+              "Continue with Google"
+            )}
           </button>
-        </form>
-
-        <p className="text-center text-sm text-ink-500 mt-6">
-          Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-brand-600 font-medium hover:text-brand-700">Sign up</Link>
-        </p>
+        </div>
       </div>
     </div>
   );

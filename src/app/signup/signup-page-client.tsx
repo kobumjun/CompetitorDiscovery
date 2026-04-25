@@ -1,62 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Rocket, Loader2, AlertCircle, CheckCircle2, Sparkles } from "lucide-react";
+import { Rocket, Loader2, AlertCircle, Sparkles } from "lucide-react";
+import { GoogleAuthTrigger } from "@/components/google-auth-trigger";
 
 export default function SignupPageClient() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function startGoogleAuth() {
     setError("");
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
-
     setLoading(true);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-    });
+    try {
+      const supabase = createClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
 
-    if (error) {
-      setError(error.message);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?redirect=/dashboard`,
+        },
+      });
+
+      if (error) {
+        setError(error.message);
+      }
+    } catch {
+      setError("Google sign-in failed. Please try again.");
       setLoading(false);
       return;
     }
 
-    setSuccess(true);
     setLoading(false);
   }
 
-  if (success) {
-    return (
-      <div className="min-h-screen bg-surface-50 flex items-center justify-center px-4">
-        <div className="w-full max-w-sm text-center">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-          </div>
-          <h1 className="text-heading font-bold text-ink-900 mb-2">Check your email</h1>
-          <p className="text-sm text-ink-500 mb-6">
-            We sent a confirmation link to <strong className="text-ink-700">{email}</strong>.
-            Click the link to activate your account and start creating proposals.
-          </p>
-          <Link href="/login" className="btn-secondary">Back to login</Link>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    void startGoogleAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-screen bg-surface-50 flex items-center justify-center px-4">
@@ -67,40 +58,35 @@ export default function SignupPageClient() {
             <span className="text-xl font-bold text-ink-900">ProposalPilot</span>
           </Link>
           <h1 className="text-heading font-bold text-ink-900">
-            Start creating winning proposals
+            Start free with Google
           </h1>
           <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 bg-brand-50 border border-brand-200 rounded-full">
             <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-            <span className="text-xs font-semibold text-brand-700">5 free proposals included</span>
+            <span className="text-xs font-semibold text-brand-700">5 free credits included</span>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="card p-6 space-y-4">
+        <div className="card p-6 space-y-4">
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
             </div>
           )}
 
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-ink-700 mb-1.5">Email</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input-field" placeholder="you@example.com" required />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-ink-700 mb-1.5">Password</label>
-            <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input-field" placeholder="Minimum 6 characters" minLength={6} required />
-            <p className="text-xs text-ink-400 mt-1">Must be at least 6 characters</p>
-          </div>
-
-          <button type="submit" disabled={loading} className="btn-primary w-full">
-            {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating account...</> : "Create account"}
+          <button type="button" onClick={startGoogleAuth} disabled={loading} className="btn-primary w-full">
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Redirecting to Google...
+              </>
+            ) : (
+              "Continue with Google"
+            )}
           </button>
-        </form>
+        </div>
 
         <p className="text-center text-sm text-ink-500 mt-6">
           Already have an account?{" "}
-          <Link href="/login" className="text-brand-600 font-medium hover:text-brand-700">Sign in</Link>
+          <GoogleAuthTrigger className="text-brand-600 font-medium hover:text-brand-700">Continue with Google</GoogleAuthTrigger>
         </p>
       </div>
     </div>

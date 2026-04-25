@@ -6,6 +6,7 @@ import { PLANS } from "@/types";
 import { PlanCheckoutButton } from "@/components/plan-checkout-button";
 import type { PaidPlan } from "@/lib/lemonsqueezy";
 import { SiteFooter } from "@/components/site-footer";
+import { GoogleAuthTrigger } from "@/components/google-auth-trigger";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -42,8 +43,8 @@ export default function PricingPage() {
             <span className="text-lg font-bold text-ink-900">ProposalPilot</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link href="/login" className="btn-ghost text-sm">Log in</Link>
-            <Link href="/signup" className="btn-primary text-sm">Start Free</Link>
+            <GoogleAuthTrigger className="btn-ghost text-sm">Log in</GoogleAuthTrigger>
+            <GoogleAuthTrigger className="btn-primary text-sm">Start Free</GoogleAuthTrigger>
           </div>
         </div>
       </nav>
@@ -84,7 +85,7 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/signup" className="btn-secondary w-full text-center">Get Started Free</Link>
+              <GoogleAuthTrigger className="btn-secondary w-full text-center">Get Started Free</GoogleAuthTrigger>
             </div>
 
             {PLANS.map((plan) => (

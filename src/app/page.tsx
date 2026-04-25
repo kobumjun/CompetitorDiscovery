@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Rocket,
   ArrowRight,
@@ -19,8 +20,28 @@ import { PLANS } from "@/types";
 import { PlanCheckoutButton } from "@/components/plan-checkout-button";
 import type { PaidPlan } from "@/lib/lemonsqueezy";
 import { SiteFooter } from "@/components/site-footer";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LandingPage() {
+  const router = useRouter();
+
+  async function startGoogleAuth() {
+    const supabase = createClient();
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData.session) {
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?redirect=/dashboard`,
+      },
+    });
+  }
+
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
@@ -36,8 +57,8 @@ export default function LandingPage() {
             <a href="#pricing" className="text-sm font-medium text-ink-500 hover:text-ink-900 transition-colors">Pricing</a>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/login" className="btn-ghost text-sm">Log in</Link>
-            <Link href="/signup" className="btn-primary text-sm">Start Free</Link>
+            <button type="button" onClick={startGoogleAuth} className="btn-ghost text-sm">Log in</button>
+            <button type="button" onClick={startGoogleAuth} className="btn-primary text-sm">Start Free</button>
           </div>
         </div>
       </nav>
@@ -60,10 +81,10 @@ export default function LandingPage() {
             extracts contact emails, and generates a personalized pitch with AI. Ready to send in 60 seconds.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
-            <Link href="/signup" className="btn-primary text-base px-8 py-3">
+            <button type="button" onClick={startGoogleAuth} className="btn-primary text-base px-8 py-3">
               Try it free
               <ArrowRight className="w-5 h-5" />
-            </Link>
+            </button>
             <a href="#how-it-works" className="btn-secondary text-base px-6 py-3">
               See How It Works
             </a>
@@ -292,9 +313,9 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/signup" className="btn-secondary w-full text-center">
+              <button type="button" onClick={startGoogleAuth} className="btn-secondary w-full text-center">
                 Get Started Free
-              </Link>
+              </button>
             </div>
 
             {/* Paid Plans */}
@@ -345,10 +366,10 @@ export default function LandingPage() {
             Stop spending hours on outreach. Let AI do the heavy lifting so you
             can focus on what you do best.
           </p>
-          <Link href="/signup" className="btn-primary text-base px-8 py-3">
+          <button type="button" onClick={startGoogleAuth} className="btn-primary text-base px-8 py-3">
             Start Free — 5 Credits Included
             <ArrowRight className="w-5 h-5" />
-          </Link>
+          </button>
           <p className="text-xs text-ink-400 mt-4">No credit card required</p>
         </div>
       </section>
@@ -364,7 +385,7 @@ export default function LandingPage() {
             <div className="flex items-center gap-6 text-sm text-ink-400">
               <a href="#features" className="hover:text-ink-700 transition-colors">Features</a>
               <a href="#pricing" className="hover:text-ink-700 transition-colors">Pricing</a>
-              <Link href="/login" className="hover:text-ink-700 transition-colors">Login</Link>
+              <button type="button" onClick={startGoogleAuth} className="hover:text-ink-700 transition-colors">Login</button>
             </div>
           </div>
         </div>

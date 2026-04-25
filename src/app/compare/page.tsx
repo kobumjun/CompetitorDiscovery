@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Rocket } from "lucide-react";
 import { SiteFooter } from "@/components/site-footer";
+import { GoogleAuthTrigger } from "@/components/google-auth-trigger";
 
 export const metadata: Metadata = {
   title: "ProposalPilot vs Apollo vs Hunter vs Clay — Which Outreach Tool is Right for You?",
@@ -69,12 +70,12 @@ export default function ComparePage() {
             <span className="text-lg font-bold text-ink-900">ProposalPilot</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link href="/login" className="btn-ghost text-sm">
+            <GoogleAuthTrigger className="btn-ghost text-sm">
               Log in
-            </Link>
-            <Link href="/signup" className="btn-primary text-sm">
+            </GoogleAuthTrigger>
+            <GoogleAuthTrigger className="btn-primary text-sm">
               Start Free
-            </Link>
+            </GoogleAuthTrigger>
           </div>
         </div>
       </nav>
@@ -145,10 +146,10 @@ export default function ComparePage() {
           <p className="text-ink-500 mb-6">
             Start free and test real-time extraction plus AI outreach generation.
           </p>
-          <Link href="/signup" className="btn-primary inline-flex">
+          <GoogleAuthTrigger className="btn-primary inline-flex">
             Try ProposalPilot free
             <ArrowRight className="w-4 h-4" />
-          </Link>
+          </GoogleAuthTrigger>
         </section>
       </main>
 
