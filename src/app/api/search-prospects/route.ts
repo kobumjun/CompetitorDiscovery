@@ -3,10 +3,12 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { reserveCredits, refundCredits } from "@/lib/credits";
 import { deriveCompanyNameFromHost, extractWebsiteEmails, normalizeUrl } from "@/lib/leads/extraction";
 
+export const maxDuration = 120;
+
 const SERPER_ENDPOINT = "https://google.serper.dev/search";
-const MAX_SERPER_CALLS = 3;
-const URL_TIMEOUT_MS = 15000;
-const OVERALL_TIMEOUT_MS = 60_000;
+const MAX_SERPER_CALLS = 5;
+const URL_TIMEOUT_MS = 12000;
+const OVERALL_TIMEOUT_MS = 90_000;
 const CONCURRENCY = 5;
 const BLOCKED_HOSTS = [
   "g2.com",
@@ -29,6 +31,20 @@ const BLOCKED_HOSTS = [
   "tiktok.com",
   "reddit.com",
   "medium.com",
+  "yelp.com",
+  "bbb.org",
+  "yellowpages.com",
+  "mapquest.com",
+  "tripadvisor.com",
+  "amazon.com",
+  "ebay.com",
+  "apple.com",
+  "google.com",
+  "microsoft.com",
+  "github.com",
+  "stackoverflow.com",
+  "indeed.com",
+  "ziprecruiter.com",
 ];
 
 type SerperOrganicResult = {
@@ -43,15 +59,24 @@ function isBlockedHost(hostname: string) {
   return BLOCKED_HOSTS.some((blocked) => hostname === blocked || hostname.endsWith(`.${blocked}`));
 }
 
-function buildSearchQuery(input: string) {
-  const trimmed = input.trim();
-  if (trimmed.split(/\s+/).length <= 2) {
-    return `${trimmed} company official site`;
+function buildQueryVariations(rawQuery: string): string[] {
+  const q = rawQuery.trim();
+  const variations: string[] = [];
+
+  if (q.split(/\s+/).length <= 2) {
+    variations.push(`${q} company official site`);
+  } else if (!/official|contact/i.test(q)) {
+    variations.push(`${q} official site contact`);
+  } else {
+    variations.push(q);
   }
-  if (!/official|contact/i.test(trimmed)) {
-    return `${trimmed} official site contact`;
-  }
-  return trimmed;
+
+  variations.push(`${q} contact us email`);
+  variations.push(`${q} official website`);
+  variations.push(`${q} company website contact`);
+  variations.push(`${q} site:com`);
+
+  return variations;
 }
 
 async function runWithConcurrency<TInput, TOutput>(
@@ -76,6 +101,14 @@ async function runWithConcurrency<TInput, TOutput>(
 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, () => runner()));
   return results;
+}
+
+function hostFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -117,19 +150,41 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     const isTimedOut = () => Date.now() - startTime > OVERALL_TIMEOUT_MS;
 
-    const failures: { url: string; reason: string }[] = [];
-    const uniqueRows: { email: string; source_url: string; company_name: string; host: string }[] = [];
+    // Load user's previously extracted emails & domains to avoid duplicates across searches
+    const service = await createServiceClient();
+    const { data: existingLeads } = await service
+      .from("extracted_leads")
+      .select("emails, source_url")
+      .eq("user_id", user.id);
+
     const seenEmails = new Set<string>();
     const seenDomains = new Set<string>();
+    const seenHosts = new Set<string>();
+
+    if (existingLeads) {
+      for (const lead of existingLeads) {
+        if (lead.source_url) {
+          seenHosts.add(hostFromUrl(lead.source_url));
+        }
+        const emailsArr = Array.isArray(lead.emails) ? lead.emails : [];
+        for (const entry of emailsArr) {
+          const email = typeof entry === "string" ? entry : (entry as { email?: string })?.email;
+          if (!email) continue;
+          const lower = email.toLowerCase();
+          seenEmails.add(lower);
+          const domain = lower.split("@")[1] ?? "";
+          if (domain) seenDomains.add(domain);
+        }
+      }
+    }
+
+    const failures: { url: string; reason: string }[] = [];
+    const uniqueRows: { email: string; source_url: string; company_name: string; host: string }[] = [];
     const usedCandidateUrls = new Set<string>();
     let processedCount = 0;
 
-    const queryVariations = [
-      buildSearchQuery(query),
-      `${query.trim()} contact email`,
-      `${query.trim()} official website`,
-    ];
-
+    const queryVariations = buildQueryVariations(query);
+    const serperNum = Math.min(100, Math.max(30, targetCount * 5));
     let serperCalls = 0;
 
     for (const searchQuery of queryVariations) {
@@ -142,7 +197,7 @@ export async function POST(request: NextRequest) {
           "X-API-KEY": apiKey,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ q: searchQuery, num: 30 }),
+        body: JSON.stringify({ q: searchQuery, num: serperNum }),
       });
       serperCalls++;
 
@@ -162,7 +217,10 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
         .map((url) => normalizeUrl(url))
         .filter((url): url is URL => Boolean(url))
-        .filter((url) => !isBlockedHost(url.hostname.toLowerCase()))
+        .filter((url) => {
+          const host = url.hostname.replace(/^www\./, "").toLowerCase();
+          return !isBlockedHost(host) && !seenHosts.has(host);
+        })
         .map((url) => url.toString())
         .filter((url) => !usedCandidateUrls.has(url));
 
@@ -170,8 +228,7 @@ export async function POST(request: NextRequest) {
 
       let cursor = 0;
       while (cursor < candidates.length && uniqueRows.length < targetCount && !isTimedOut()) {
-        const remaining = targetCount - uniqueRows.length;
-        const batchSize = Math.max(CONCURRENCY, remaining * 2);
+        const batchSize = CONCURRENCY;
         const batch = candidates.slice(cursor, cursor + batchSize);
         cursor += batch.length;
         processedCount += batch.length;
@@ -224,6 +281,7 @@ export async function POST(request: NextRequest) {
 
           seenEmails.add(emailLower);
           seenDomains.add(emailDomain);
+          seenHosts.add(row.host.replace(/^www\./, "").toLowerCase());
           uniqueRows.push(row);
         });
       }
@@ -239,7 +297,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const service = await createServiceClient();
     const leads: Array<{
       email: string;
       source_url: string;

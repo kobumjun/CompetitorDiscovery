@@ -239,12 +239,13 @@ export default function LeadsPage() {
     setBulkResult(null);
     setSelectedEmails(new Set());
 
-    const timerA = setTimeout(() => setSmartProgress("Found companies. Extracting emails..."), 3000);
-    const timerB = setTimeout(() => setSmartProgress("Expanding search..."), 12000);
-    const timerC = setTimeout(() => setSmartProgress("Still searching... almost done"), 25000);
+    const timerA = setTimeout(() => setSmartProgress("Found companies. Extracting emails..."), 4000);
+    const timerB = setTimeout(() => setSmartProgress("Scanning more sites..."), 15000);
+    const timerC = setTimeout(() => setSmartProgress("Expanding search to find more results..."), 30000);
+    const timerD = setTimeout(() => setSmartProgress("Still searching... almost done"), 50000);
     const counterTimer = setInterval(() => {
       setSmartCounter((prev) => Math.min(prev + 1, targetCount));
-    }, 2000);
+    }, Math.max(2000, (targetCount * 3000) / targetCount));
 
     try {
       const response = await fetch("/api/search-prospects", {
@@ -285,6 +286,7 @@ export default function LeadsPage() {
       clearTimeout(timerA);
       clearTimeout(timerB);
       clearTimeout(timerC);
+      clearTimeout(timerD);
       clearInterval(counterTimer);
       setSmartLoading(false);
       setTimeout(() => setSmartProgress(null), 1200);
@@ -469,12 +471,20 @@ export default function LeadsPage() {
           Uses {targetCount} credit{targetCount !== 1 ? "s" : ""}. Unused credits refunded if fewer emails are found.
         </p>
         {smartProgress && (
-          <div className="mt-2 space-y-1">
-            <p className="text-sm text-brand-700">{smartProgress}</p>
+          <div className="mt-2 space-y-1.5">
+            <div className="flex items-center gap-2">
+              {smartLoading && (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />
+              )}
+              <p className="text-sm font-medium text-brand-700">{smartProgress}</p>
+            </div>
             {smartLoading && smartCounter > 0 && (
               <p className="text-xs text-ink-500">
                 Found {smartCounter} of {targetCount} emails...
               </p>
+            )}
+            {smartLoading && targetCount > 3 && (
+              <p className="text-xs text-ink-400">This may take up to a minute for larger requests.</p>
             )}
           </div>
         )}

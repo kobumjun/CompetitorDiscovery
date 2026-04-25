@@ -174,12 +174,13 @@ export default function DashboardPage() {
     setRowComposers({});
     setProcessingCounter(0);
     setProgress("Searching for prospects...");
-    const timerA = setTimeout(() => setProgress(`Found companies. Extracting emails...`), 3000);
-    const timerB = setTimeout(() => setProgress("Expanding search..."), 12000);
-    const timerC = setTimeout(() => setProgress("Still searching... almost done"), 25000);
+    const timerA = setTimeout(() => setProgress("Found companies. Extracting emails..."), 4000);
+    const timerB = setTimeout(() => setProgress("Scanning more sites..."), 15000);
+    const timerC = setTimeout(() => setProgress("Expanding search to find more results..."), 30000);
+    const timerD = setTimeout(() => setProgress("Still searching... almost done"), 50000);
     const counterTimer = setInterval(() => {
       setProcessingCounter((prev) => Math.min(prev + 1, targetCount));
-    }, 2000);
+    }, Math.max(2000, (targetCount * 3000) / targetCount));
 
     try {
       const searchRes = await fetch("/api/search-prospects", {
@@ -211,6 +212,7 @@ export default function DashboardPage() {
       clearTimeout(timerA);
       clearTimeout(timerB);
       clearTimeout(timerC);
+      clearTimeout(timerD);
       clearInterval(counterTimer);
       setProspectLoading(false);
       setTimeout(() => setProgress(null), 1200);
@@ -333,10 +335,18 @@ export default function DashboardPage() {
         </div>
 
         {progress && (
-          <div className="mt-3 space-y-1">
-            <p className="text-sm text-brand-700">{progress}</p>
+          <div className="mt-3 space-y-1.5">
+            <div className="flex items-center gap-2">
+              {prospectLoading && (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />
+              )}
+              <p className="text-sm font-medium text-brand-700">{progress}</p>
+            </div>
             {prospectLoading && processingCounter > 0 && (
               <p className="text-xs text-ink-500">Found {processingCounter} of {targetCount} emails...</p>
+            )}
+            {prospectLoading && targetCount > 3 && (
+              <p className="text-xs text-ink-400">This may take up to a minute for larger requests.</p>
             )}
           </div>
         )}

@@ -4,6 +4,10 @@ const EXCLUDED_EMAIL_HINTS = [
   "noreply",
   "no-reply",
   "donotreply",
+  "do-not-reply",
+  "unsubscribe",
+  "bounce",
+  "mailer-daemon",
   "example",
   "test@",
   "privacy@",
@@ -14,8 +18,19 @@ const EXCLUDED_EMAIL_HINTS = [
   "wordpress",
   ".png",
   ".jpg",
+  ".gif",
+  ".svg",
+  ".webp",
+  ".woff",
+  ".css",
+  ".js@",
   "sentry",
   "cloudflare",
+  "wixpress",
+  "squarespace",
+  "mailchimp",
+  "sendgrid",
+  "mailgun",
 ];
 const PATHS_TO_CRAWL = ["", "/contact", "/about", "/team", "/about-us", "/contact-us"];
 const BLOCKED_HOSTS = ["linkedin.com", "instagram.com", "facebook.com", "x.com", "twitter.com"];
@@ -57,6 +72,20 @@ export function extractEmailsFromHTML(html: string): string[] {
     const lower = email.toLowerCase();
     return !EXCLUDED_EMAIL_HINTS.some((excluded) => lower.includes(excluded));
   });
+}
+
+const PREFERRED_PREFIXES = ["info@", "hello@", "contact@", "support@", "sales@", "team@", "office@", "admin@", "help@"];
+
+function emailPriorityScore(email: string): number {
+  const lower = email.toLowerCase();
+  const prefixIdx = PREFERRED_PREFIXES.findIndex((p) => lower.startsWith(p));
+  if (prefixIdx !== -1) return prefixIdx;
+  if (/@/.test(lower) && !/^\d/.test(lower)) return 100;
+  return 200;
+}
+
+function prioritizeEmails(emails: string[]): string[] {
+  return [...emails].sort((a, b) => emailPriorityScore(a) - emailPriorityScore(b));
 }
 
 export function getSourceHint(email: string, pages: CrawledPage[], baseUrl: string): string {
@@ -119,7 +148,7 @@ export async function extractWebsiteEmails(
     };
   }
 
-  const emails = extractEmailsFromHTML(combinedHtml);
+  const emails = prioritizeEmails(extractEmailsFromHTML(combinedHtml));
   if (emails.length === 0) {
     return {
       ok: false,
