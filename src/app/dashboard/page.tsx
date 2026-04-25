@@ -22,6 +22,7 @@ import { cn, formatRelativeTime } from "@/lib/utils";
 import type { ExtractedLead, OutreachType, Proposal } from "@/types";
 import { formatCurrency } from "@/types";
 import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
+import { EmailCountStepper } from "@/components/email-count-stepper";
 
 type ProspectLead = {
   email: string;
@@ -101,7 +102,7 @@ export default function DashboardPage() {
   const [urlFallback, setUrlFallback] = useState("");
   const [openUrlFallback, setOpenUrlFallback] = useState(false);
   const [prospectLoading, setProspectLoading] = useState(false);
-  const [targetCount, setTargetCount] = useState<1 | 3 | 5 | 10>(3);
+  const [targetCount, setTargetCount] = useState(3);
   const [progress, setProgress] = useState<string | null>(null);
   const [processingCounter, setProcessingCounter] = useState(0);
   const [prospectError, setProspectError] = useState<string | null>(null);
@@ -172,12 +173,13 @@ export default function DashboardPage() {
     setProspectResult(null);
     setRowComposers({});
     setProcessingCounter(0);
-    setProgress("Searching Google...");
+    setProgress("Searching for prospects...");
     const timerA = setTimeout(() => setProgress(`Found companies. Extracting emails...`), 3000);
-    const timerB = setTimeout(() => setProgress("Almost done..."), 15000);
+    const timerB = setTimeout(() => setProgress("Expanding search..."), 12000);
+    const timerC = setTimeout(() => setProgress("Still searching... almost done"), 25000);
     const counterTimer = setInterval(() => {
       setProcessingCounter((prev) => Math.min(prev + 1, targetCount));
-    }, 1400);
+    }, 2000);
 
     try {
       const searchRes = await fetch("/api/search-prospects", {
@@ -192,8 +194,8 @@ export default function DashboardPage() {
       }
       const payload = searchPayload as BulkPayload;
       setProspectResult(payload);
-      setProgress("Done!");
-      setProcessingCounter(payload.processedCount || targetCount);
+      setProcessingCounter(payload.leads.length);
+      setProgress(payload.message || "Done!");
       if (payload.leads.length === 0) {
         setProspectError(
           `No emails found — all ${payload.creditsReserved} credits refunded. Try different keywords.`
@@ -208,6 +210,7 @@ export default function DashboardPage() {
     } finally {
       clearTimeout(timerA);
       clearTimeout(timerB);
+      clearTimeout(timerC);
       clearInterval(counterTimer);
       setProspectLoading(false);
       setTimeout(() => setProgress(null), 1200);
@@ -283,30 +286,12 @@ export default function DashboardPage() {
         />
         <div className="mt-4">
           <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {[1, 3, 5, 10].map((count) => {
-              const disabled = credits !== null && count > credits;
-              return (
-                <button
-                  key={count}
-                  type="button"
-                  disabled={disabled || prospectLoading}
-                  title={disabled ? `Not enough credits. You have ${credits} credits.` : undefined}
-                  onClick={() => setTargetCount(count as 1 | 3 | 5 | 10)}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-sm font-semibold transition-colors",
-                    count === targetCount
-                      ? "border-orange-500 bg-orange-500 text-white"
-                      : "border-surface-200 bg-white text-ink-600 hover:bg-surface-50",
-                    count === 10 && "text-xs sm:text-sm",
-                    disabled && "opacity-40 cursor-not-allowed hover:bg-white"
-                  )}
-                >
-                  {count}
-                </button>
-              );
-            })}
-          </div>
+          <EmailCountStepper
+            value={targetCount}
+            onChange={setTargetCount}
+            maxCredits={credits}
+            disabled={prospectLoading}
+          />
         </div>
         <button
           className="mt-3 inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
@@ -318,7 +303,7 @@ export default function DashboardPage() {
           <ArrowRight className="w-4 h-4 ml-1.5" />
         </button>
         <p className="mt-2 text-xs text-ink-500">
-          Uses {targetCount} credits. Unused credits refunded automatically.
+          Uses {targetCount} credit{targetCount !== 1 ? "s" : ""}. Unused credits refunded if fewer emails are found.
         </p>
 
         <div className="mt-4 rounded-lg border border-surface-200 bg-white">
@@ -350,7 +335,9 @@ export default function DashboardPage() {
         {progress && (
           <div className="mt-3 space-y-1">
             <p className="text-sm text-brand-700">{progress}</p>
-            {prospectLoading && <p className="text-xs text-ink-500">Processing {processingCounter} of {targetCount} sites...</p>}
+            {prospectLoading && processingCounter > 0 && (
+              <p className="text-xs text-ink-500">Found {processingCounter} of {targetCount} emails...</p>
+            )}
           </div>
         )}
         {prospectError && <p className="mt-3 text-sm text-red-600">{prospectError}</p>}

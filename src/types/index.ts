@@ -10,7 +10,7 @@ export interface User {
 
 export type PlanType = "free" | "pro" | "agency";
 
-export const INITIAL_FREE_CREDITS = 5;
+export const INITIAL_FREE_CREDITS = 10;
 
 export interface BusinessProfile {
   id: string;
@@ -165,8 +165,8 @@ export interface Outreach {
 }
 
 export const PLAN_MONTHLY_CREDITS = {
-  pro: 50,
-  agency: 200,
+  pro: 150,
+  agency: 500,
 } as const;
 
 export function planIncludedCredits(plan: PlanType): number {
@@ -197,11 +197,11 @@ export const PLANS: PlanConfig[] = [
     type: "pro",
     price: 19,
     credits: PLAN_MONTHLY_CREDITS.pro,
-    pricePerCredit: "$0.38",
+    pricePerCredit: "$0.13",
     popular: true,
     variantIdEnvKey: "LEMONSQUEEZY_PRO_VARIANT_ID",
     features: [
-      "50 proposals / month",
+      "150 credits / month",
       "AI proposal generation (GPT-4o)",
       "Unlimited clients",
       "Electronic signatures",
@@ -216,10 +216,10 @@ export const PLANS: PlanConfig[] = [
     type: "agency",
     price: 49,
     credits: PLAN_MONTHLY_CREDITS.agency,
-    pricePerCredit: "$0.25",
+    pricePerCredit: "$0.10",
     variantIdEnvKey: "LEMONSQUEEZY_AGENCY_VARIANT_ID",
     features: [
-      "200 proposals / month",
+      "500 credits / month",
       "Everything in Pro",
       "Priority AI generation",
       "Custom templates library",

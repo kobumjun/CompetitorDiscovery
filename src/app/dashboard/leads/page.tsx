@@ -11,6 +11,7 @@ import { ChevronDown, Copy, Download, Globe, Grid3X3, Mail, Plus, Search, Sparkl
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { ListPagination, LIST_PAGE_SIZE } from "@/components/list-pagination";
 import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
+import { EmailCountStepper } from "@/components/email-count-stepper";
 
 async function fetchLeadsDashboard(): Promise<{ leads: ExtractedLead[]; credits: number }> {
   const supabase = createClient();
@@ -123,7 +124,7 @@ export default function LeadsPage() {
   const [bulkResult, setBulkResult] = useState<BulkResponse | null>(null);
   const [openUrlInput, setOpenUrlInput] = useState(false);
   const [keyword, setKeyword] = useState("");
-  const [targetCount, setTargetCount] = useState<1 | 3 | 5 | 10>(3);
+  const [targetCount, setTargetCount] = useState(3);
   const [smartLoading, setSmartLoading] = useState(false);
   const [smartProgress, setSmartProgress] = useState<string | null>(null);
   const [smartCounter, setSmartCounter] = useState(0);
@@ -233,16 +234,17 @@ export default function LeadsPage() {
     if (!keyword.trim()) return;
     setSmartLoading(true);
     setSmartError(null);
-    setSmartProgress("Searching for keywords...");
+    setSmartProgress("Searching for prospects...");
     setSmartCounter(0);
     setBulkResult(null);
     setSelectedEmails(new Set());
 
     const timerA = setTimeout(() => setSmartProgress("Found companies. Extracting emails..."), 3000);
-    const timerB = setTimeout(() => setSmartProgress("Almost done..."), 15000);
+    const timerB = setTimeout(() => setSmartProgress("Expanding search..."), 12000);
+    const timerC = setTimeout(() => setSmartProgress("Still searching... almost done"), 25000);
     const counterTimer = setInterval(() => {
       setSmartCounter((prev) => Math.min(prev + 1, targetCount));
-    }, 1400);
+    }, 2000);
 
     try {
       const response = await fetch("/api/search-prospects", {
@@ -269,8 +271,8 @@ export default function LeadsPage() {
         partial: payload.creditsRefunded > 0,
         message: payload.message,
       });
-      setSmartCounter(payload.processedCount || targetCount);
-      setSmartProgress("Done!");
+      setSmartCounter(payload.leads.length);
+      setSmartProgress(payload.message || "Done!");
 
       if (typeof payload.creditsRemaining === "number") {
         void mutateGlobal(DASHBOARD_CREDITS_KEY, payload.creditsRemaining, false);
@@ -282,6 +284,7 @@ export default function LeadsPage() {
     } finally {
       clearTimeout(timerA);
       clearTimeout(timerB);
+      clearTimeout(timerC);
       clearInterval(counterTimer);
       setSmartLoading(false);
       setTimeout(() => setSmartProgress(null), 1200);
@@ -447,30 +450,12 @@ export default function LeadsPage() {
         />
         <div className="mt-4">
           <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {[1, 3, 5, 10].map((count) => {
-              const disabled = credits !== null && count > credits;
-              return (
-                <button
-                  key={count}
-                  type="button"
-                  disabled={disabled || smartLoading}
-                  title={disabled ? `Not enough credits. You have ${credits} credits.` : undefined}
-                  onClick={() => setTargetCount(count as 1 | 3 | 5 | 10)}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-sm font-semibold transition-colors",
-                    count === targetCount
-                      ? "border-orange-500 bg-orange-500 text-white"
-                      : "border-surface-200 bg-white text-ink-600 hover:bg-surface-50",
-                    count === 10 && "text-xs sm:text-sm",
-                    disabled && "opacity-40 cursor-not-allowed hover:bg-white"
-                  )}
-                >
-                  {count}
-                </button>
-              );
-            })}
-          </div>
+          <EmailCountStepper
+            value={targetCount}
+            onChange={setTargetCount}
+            maxCredits={credits}
+            disabled={smartLoading}
+          />
         </div>
         <button
           onClick={handleSmartSearch}
@@ -481,14 +466,14 @@ export default function LeadsPage() {
           Find {targetCount} Prospects & Emails
         </button>
         <p className="mt-2 text-xs text-ink-500">
-          Uses {targetCount} credits. Unused credits refunded automatically.
+          Uses {targetCount} credit{targetCount !== 1 ? "s" : ""}. Unused credits refunded if fewer emails are found.
         </p>
         {smartProgress && (
           <div className="mt-2 space-y-1">
             <p className="text-sm text-brand-700">{smartProgress}</p>
-            {smartLoading && (
+            {smartLoading && smartCounter > 0 && (
               <p className="text-xs text-ink-500">
-                Processing {smartCounter} of {targetCount} sites...
+                Found {smartCounter} of {targetCount} emails...
               </p>
             )}
           </div>

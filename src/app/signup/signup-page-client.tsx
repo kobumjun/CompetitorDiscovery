@@ -62,7 +62,7 @@ export default function SignupPageClient() {
           </h1>
           <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 bg-brand-50 border border-brand-200 rounded-full">
             <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-            <span className="text-xs font-semibold text-brand-700">5 free credits included</span>
+            <span className="text-xs font-semibold text-brand-700">10 free credits included</span>
           </div>
         </div>
 

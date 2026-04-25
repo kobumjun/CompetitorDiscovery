@@ -16,7 +16,7 @@ const softwareApplicationSchema = {
       name: "Free",
       price: "0",
       priceCurrency: "USD",
-      description: "5 free credits",
+      description: "10 free credits",
     },
     {
       "@type": "Offer",
@@ -24,7 +24,7 @@ const softwareApplicationSchema = {
       price: "19",
       priceCurrency: "USD",
       billingIncrement: "monthly",
-      description: "50 credits per month",
+      description: "150 credits per month",
     },
     {
       "@type": "Offer",
@@ -32,7 +32,7 @@ const softwareApplicationSchema = {
       price: "49",
       priceCurrency: "USD",
       billingIncrement: "monthly",
-      description: "200 credits per month",
+      description: "500 credits per month",
     },
   ],
   featureList: [

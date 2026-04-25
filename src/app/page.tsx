@@ -285,7 +285,7 @@ export default function LandingPage() {
               Simple, transparent pricing
             </h2>
             <p className="text-ink-500">
-              Start with 5 free credits. Upgrade when you need more.
+              Start with 10 free credits. Upgrade when you need more.
             </p>
           </div>
 
@@ -298,11 +298,11 @@ export default function LandingPage() {
                   <span className="text-3xl font-black text-ink-900">$0</span>
                   <span className="text-sm text-ink-400">/mo</span>
                 </div>
-                <div className="mt-1 text-sm text-ink-500">5 credits included</div>
+                <div className="mt-1 text-sm text-ink-500">10 credits included</div>
               </div>
               <ul className="space-y-3 mb-8 flex-1">
                 {[
-                  "5 AI-powered emails",
+                  "10 AI-powered emails",
                   "Keyword search to find prospects",
                   "Email extraction",
                   "Shareable links",
@@ -367,7 +367,7 @@ export default function LandingPage() {
             can focus on what you do best.
           </p>
           <button type="button" onClick={startGoogleAuth} className="btn-primary text-base px-8 py-3">
-            Start Free — 5 Credits Included
+            Start Free — 10 Credits Included
             <ArrowRight className="w-5 h-5" />
           </button>
           <p className="text-xs text-ink-400 mt-4">No credit card required</p>

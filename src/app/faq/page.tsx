@@ -27,7 +27,7 @@ const faqItems = [
   {
     question: "How much does ProposalPilot cost?",
     answer:
-      "Free tier includes 5 credits. Pro plan is $19/month with 50 credits. Agency plan is $49/month with 200 credits. Each AI-generated proposal costs 1 credit. Manual writing is always free.",
+      "Free tier includes 10 credits. Pro plan is $19/month with 150 credits. Agency plan is $49/month with 500 credits. Each AI-generated proposal costs 1 credit. Manual writing is always free.",
   },
   {
     question: "Does ProposalPilot send emails for me?",
@@ -93,7 +93,7 @@ export default function FAQPage() {
         <section className="mt-12 card p-8 text-center">
           <h2 className="text-heading font-bold text-ink-900 mb-3">Ready to try it?</h2>
           <p className="text-ink-500 mb-6">
-            Start with 5 free credits and generate your first outreach email in under a minute.
+            Start with 10 free credits and generate your first outreach email in under a minute.
           </p>
           <GoogleAuthTrigger className="btn-primary inline-flex">
             Try ProposalPilot free

@@ -4,8 +4,9 @@ import { reserveCredits, refundCredits } from "@/lib/credits";
 import { deriveCompanyNameFromHost, extractWebsiteEmails, normalizeUrl } from "@/lib/leads/extraction";
 
 const SERPER_ENDPOINT = "https://google.serper.dev/search";
-const MAX_RESULTS = 80;
+const MAX_SERPER_CALLS = 3;
 const URL_TIMEOUT_MS = 15000;
+const OVERALL_TIMEOUT_MS = 60_000;
 const CONCURRENCY = 5;
 const BLOCKED_HOSTS = [
   "g2.com",
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
     if (!query || !query.trim()) {
       return NextResponse.json({ error: "Query is required." }, { status: 400 });
     }
-    const targetCount = [1, 3, 5, 10].includes(requestedCount ?? 0) ? Number(requestedCount) : 3;
+    const targetCount = Math.min(20, Math.max(1, Math.round(requestedCount ?? 3)));
     const reserve = await reserveCredits(user.id, targetCount);
     if (!reserve.success) {
       return NextResponse.json(
@@ -113,49 +114,122 @@ export async function POST(request: NextRequest) {
     }
     reservedCredits = targetCount;
 
-    const enhancedQuery = buildSearchQuery(query);
-    const targetUrls = Math.min(targetCount + 15, MAX_RESULTS);
-    let candidates: string[] = [];
+    const startTime = Date.now();
+    const isTimedOut = () => Date.now() - startTime > OVERALL_TIMEOUT_MS;
 
-    for (const num of [30, 60, 80]) {
+    const failures: { url: string; reason: string }[] = [];
+    const uniqueRows: { email: string; source_url: string; company_name: string; host: string }[] = [];
+    const seenEmails = new Set<string>();
+    const seenDomains = new Set<string>();
+    const usedCandidateUrls = new Set<string>();
+    let processedCount = 0;
+
+    const queryVariations = [
+      buildSearchQuery(query),
+      `${query.trim()} contact email`,
+      `${query.trim()} official website`,
+    ];
+
+    let serperCalls = 0;
+
+    for (const searchQuery of queryVariations) {
+      if (uniqueRows.length >= targetCount || isTimedOut()) break;
+      if (serperCalls >= MAX_SERPER_CALLS) break;
+
       const response = await fetch(SERPER_ENDPOINT, {
         method: "POST",
         headers: {
           "X-API-KEY": apiKey,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          q: enhancedQuery,
-          num,
-        }),
+        body: JSON.stringify({ q: searchQuery, num: 30 }),
       });
+      serperCalls++;
 
       if (response.status === 401 || response.status === 403) {
         throw new Error("Search service unavailable. Please try again later.");
       }
-
       if (response.status === 429) {
         throw new Error("Daily search limit reached. Try again tomorrow or contact support.");
       }
-
       if (!response.ok) {
         throw new Error("Search service unavailable. Please try again later.");
       }
 
       const payload = (await response.json()) as SerperResponse;
-      const filtered = (payload.organic ?? [])
+      const candidates = (payload.organic ?? [])
         .map((result) => result.link?.trim() || "")
         .filter(Boolean)
         .map((url) => normalizeUrl(url))
         .filter((url): url is URL => Boolean(url))
         .filter((url) => !isBlockedHost(url.hostname.toLowerCase()))
-        .map((url) => url.toString());
+        .map((url) => url.toString())
+        .filter((url) => !usedCandidateUrls.has(url));
 
-      candidates = Array.from(new Set([...candidates, ...filtered]));
-      if (candidates.length >= targetUrls) break;
+      if (candidates.length === 0) continue;
+
+      let cursor = 0;
+      while (cursor < candidates.length && uniqueRows.length < targetCount && !isTimedOut()) {
+        const remaining = targetCount - uniqueRows.length;
+        const batchSize = Math.max(CONCURRENCY, remaining * 2);
+        const batch = candidates.slice(cursor, cursor + batchSize);
+        cursor += batch.length;
+        processedCount += batch.length;
+        batch.forEach((url) => usedCandidateUrls.add(url));
+
+        const extractionResults = await runWithConcurrency(batch, async (url) => {
+          if (isTimedOut()) throw new Error("Timeout");
+          const extraction = await extractWebsiteEmails(url, { timeoutMs: URL_TIMEOUT_MS });
+          if (!extraction.ok) {
+            throw new Error(extraction.message || "No emails found");
+          }
+          if (extraction.emails.length === 0) {
+            throw new Error("No emails found");
+          }
+
+          const selectedEmail = extraction.emails.find((email) => {
+            const lowerEmail = email.toLowerCase();
+            if (seenEmails.has(lowerEmail)) return false;
+            const emailDomain = lowerEmail.split("@")[1] ?? "";
+            return Boolean(emailDomain) && !seenDomains.has(emailDomain);
+          });
+
+          if (!selectedEmail) {
+            throw new Error("Only duplicate emails/domains found");
+          }
+
+          return {
+            email: selectedEmail,
+            source_url: extraction.sourceForEmail.get(selectedEmail.toLowerCase()) ?? extraction.baseUrl,
+            company_name: deriveCompanyNameFromHost(extraction.host),
+            host: extraction.host,
+          };
+        });
+
+        extractionResults.forEach((result, index) => {
+          const url = batch[index];
+          if (result.status !== "fulfilled") {
+            const reason = result.reason instanceof Error ? result.reason.message : "Unknown error";
+            failures.push({ url, reason });
+            return;
+          }
+
+          const row = result.value;
+          const emailLower = row.email.toLowerCase();
+          const emailDomain = emailLower.split("@")[1] ?? "";
+          if (!emailDomain || seenEmails.has(emailLower) || seenDomains.has(emailDomain)) {
+            failures.push({ url, reason: "Only duplicate emails/domains found" });
+            return;
+          }
+
+          seenEmails.add(emailLower);
+          seenDomains.add(emailDomain);
+          uniqueRows.push(row);
+        });
+      }
     }
 
-    if (candidates.length === 0) {
+    if (uniqueRows.length === 0 && failures.length === 0) {
       if (reservedCredits > 0) {
         await refundCredits(user.id, reservedCredits);
       }
@@ -163,70 +237,6 @@ export async function POST(request: NextRequest) {
         { error: "No companies found. Try broader keywords." },
         { status: 404 }
       );
-    }
-
-    const failures: { url: string; reason: string }[] = [];
-    const uniqueRows: { email: string; source_url: string; company_name: string; host: string }[] = [];
-    const seenEmails = new Set<string>();
-    const seenDomains = new Set<string>();
-    let cursor = 0;
-    let processedCount = 0;
-
-    while (cursor < candidates.length && uniqueRows.length < targetCount) {
-      const remaining = targetCount - uniqueRows.length;
-      const batchSize = Math.max(CONCURRENCY, remaining * 2);
-      const batch = candidates.slice(cursor, cursor + batchSize);
-      cursor += batch.length;
-      processedCount += batch.length;
-
-      const extractionResults = await runWithConcurrency(batch, async (url) => {
-        const extraction = await extractWebsiteEmails(url, { timeoutMs: URL_TIMEOUT_MS });
-        if (!extraction.ok) {
-          throw new Error(extraction.message || "No emails found");
-        }
-        if (extraction.emails.length === 0) {
-          throw new Error("No emails found");
-        }
-
-        const selectedEmail = extraction.emails.find((email) => {
-          const lowerEmail = email.toLowerCase();
-          if (seenEmails.has(lowerEmail)) return false;
-          const emailDomain = lowerEmail.split("@")[1] ?? "";
-          return Boolean(emailDomain) && !seenDomains.has(emailDomain);
-        });
-
-        if (!selectedEmail) {
-          throw new Error("Only duplicate emails/domains found");
-        }
-
-        return {
-          email: selectedEmail,
-          source_url: extraction.sourceForEmail.get(selectedEmail.toLowerCase()) ?? extraction.baseUrl,
-          company_name: deriveCompanyNameFromHost(extraction.host),
-          host: extraction.host,
-        };
-      });
-
-      extractionResults.forEach((result, index) => {
-        const url = batch[index];
-        if (result.status !== "fulfilled") {
-          const reason = result.reason instanceof Error ? result.reason.message : "Unknown error";
-          failures.push({ url, reason });
-          return;
-        }
-
-        const row = result.value;
-        const emailLower = row.email.toLowerCase();
-        const emailDomain = emailLower.split("@")[1] ?? "";
-        if (!emailDomain || seenEmails.has(emailLower) || seenDomains.has(emailDomain)) {
-          failures.push({ url, reason: "Only duplicate emails/domains found" });
-          return;
-        }
-
-        seenEmails.add(emailLower);
-        seenDomains.add(emailDomain);
-        uniqueRows.push(row);
-      });
     }
 
     const service = await createServiceClient();
@@ -293,7 +303,7 @@ export async function POST(request: NextRequest) {
       success: true,
       leads,
       requestedCount: targetCount,
-      searchedCount: candidates.length,
+      searchedCount: usedCandidateUrls.size,
       processedCount,
       successfulUrls: leads.length,
       failedUrls: failures.length,
