@@ -39,7 +39,7 @@ const comparisonRows = [
   },
   {
     feature: "Free tier",
-    proposalPilot: "Yes (10 credits)",
+    proposalPilot: "Yes (5 credits)",
     apollo: "Yes (limited)",
     hunter: "Yes (25/mo)",
     clay: "No",

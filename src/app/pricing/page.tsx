@@ -11,7 +11,7 @@ import { GoogleAuthTrigger } from "@/components/google-auth-trigger";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "ProposalPilot pricing plans. Start free with 10 credits. Pro plan $19/month, Agency plan $49/month.",
+    "ProposalPilot pricing plans. Start free with 5 credits. Pro plan $19/month, Agency plan $49/month.",
 };
 
 const FAQS = [
@@ -55,7 +55,7 @@ export default function PricingPage() {
             Simple, transparent pricing
           </h1>
           <p className="text-lg text-ink-500">
-            Start with 10 free credits. Upgrade when you need more.
+            Start with 5 free credits. Upgrade when you need more.
           </p>
         </div>
       </section>
@@ -71,11 +71,11 @@ export default function PricingPage() {
                   <span className="text-4xl font-black text-ink-900">$0</span>
                   <span className="text-sm text-ink-400">/mo</span>
                 </div>
-                <div className="mt-1 text-sm text-ink-500">10 credits</div>
+                <div className="mt-1 text-sm text-ink-500">5 credits</div>
               </div>
               <ul className="space-y-3 mb-8 flex-1">
                 {[
-                  "10 AI-powered emails",
+                  "5 AI-powered emails",
                   "Keyword search to find prospects",
                   "Email extraction",
                   "View tracking",

@@ -16,7 +16,7 @@ const softwareApplicationSchema = {
       name: "Free",
       price: "0",
       priceCurrency: "USD",
-      description: "10 free credits",
+      description: "5 free credits",
     },
     {
       "@type": "Offer",
