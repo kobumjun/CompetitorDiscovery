@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
           failures.push({ url, reason: result.reason instanceof Error ? result.reason.message : "Unknown error" });
           return;
         }
+        if (uniqueRows.length >= targetCount) return;
         const row = result.value;
         const emailLower = row.email.toLowerCase();
         if (seenEmails.has(emailLower)) {
