@@ -157,6 +157,14 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
+  const queryHasEmail = query.includes("@");
+  const queryHasUrl = /https?:\/\/|www\.|\.com\b|\.io\b|\.org\b|\.net\b/i.test(query);
+  const queryInputError = queryHasEmail
+    ? "This isn't for email addresses — describe the type of business you want to reach instead."
+    : queryHasUrl
+      ? "Looks like a URL — use 'Already have URLs? Extract in bulk' below."
+      : null;
+
   const total = proposals.length;
   const sent = proposals.filter((p) => p.status === "sent" || p.status === "viewed").length;
   const accepted = proposals.filter((p) => p.status === "accepted").length;
@@ -287,14 +295,27 @@ export default function DashboardPage() {
           Don&apos;t have a prospect list? Describe who you want to reach.
         </h2>
         <p className="mt-2 text-sm sm:text-base text-ink-600">
-          Just tell us what kind of businesses you&apos;re targeting — we&apos;ll find 10 companies and extract their emails automatically.
+          Describe your ideal customers by industry and location — we&apos;ll find real companies and extract their contact emails.
         </p>
+        <button
+          type="button"
+          className="mt-4 flex items-center gap-1.5 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-left transition-colors hover:bg-orange-100"
+          onClick={() => setQuery("web design agencies in London")}
+        >
+          <span className="text-base leading-none">💡</span>
+          <span className="text-xs sm:text-sm text-orange-700 italic">
+            Try: &quot;web design agencies in London&quot; or &quot;SaaS startups in NYC&quot;
+          </span>
+        </button>
         <input
-          className="input-field mt-4 h-12"
-          placeholder="e.g., marketing agencies in New York, SaaS startups, yoga studios"
+          className={cn("input-field mt-2 h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
+          placeholder="Type your target industry + location, e.g. 'dental clinics in LA'"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {queryInputError && (
+          <p className="mt-1.5 text-sm text-red-600">{queryInputError}</p>
+        )}
         <div className="mt-4">
           <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
           <EmailCountStepper
@@ -307,7 +328,7 @@ export default function DashboardPage() {
         <button
           className="mt-3 inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
           onClick={handleFindProspects}
-          disabled={prospectLoading || !query.trim() || credits === 0 || (credits !== null && targetCount > credits)}
+          disabled={prospectLoading || !query.trim() || !!queryInputError || credits === 0 || (credits !== null && targetCount > credits)}
         >
           <Search className="w-4 h-4 mr-1.5" />
           Find {targetCount} Prospects & Emails

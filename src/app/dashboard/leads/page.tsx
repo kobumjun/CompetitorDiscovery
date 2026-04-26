@@ -427,6 +427,14 @@ export default function LeadsPage() {
     URL.revokeObjectURL(fileUrl);
   }
 
+  const keywordHasEmail = keyword.includes("@");
+  const keywordHasUrl = /https?:\/\/|www\.|\.com\b|\.io\b|\.org\b|\.net\b/i.test(keyword);
+  const keywordInputError = keywordHasEmail
+    ? "This isn't for email addresses — describe the type of business you want to reach instead."
+    : keywordHasUrl
+      ? "Looks like a URL — use 'Already have URLs? Paste them here' below."
+      : null;
+
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
       <div className="mb-8">
@@ -440,12 +448,25 @@ export default function LeadsPage() {
         <label className="text-sm font-medium text-ink-700 mb-2 block">
           What kind of businesses do you want to reach?
         </label>
+        <button
+          type="button"
+          className="mb-2 flex items-center gap-1.5 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-left transition-colors hover:bg-orange-100"
+          onClick={() => setKeyword("web design agencies in London")}
+        >
+          <span className="text-base leading-none">💡</span>
+          <span className="text-xs sm:text-sm text-orange-700 italic">
+            Try: &quot;web design agencies in London&quot; or &quot;SaaS startups in NYC&quot;
+          </span>
+        </button>
         <input
-          className="input-field h-12"
-          placeholder="e.g., marketing agencies in London or SaaS companies"
+          className={cn("input-field h-12", keywordInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
+          placeholder="Type your target industry + location, e.g. 'dental clinics in LA'"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
         />
+        {keywordInputError && (
+          <p className="mt-1.5 text-sm text-red-600">{keywordInputError}</p>
+        )}
         <div className="mt-4">
           <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
           <EmailCountStepper
@@ -457,7 +478,7 @@ export default function LeadsPage() {
         </div>
         <button
           onClick={handleSmartSearch}
-          disabled={smartLoading || !keyword.trim() || credits === 0 || (credits !== null && targetCount > credits)}
+          disabled={smartLoading || !keyword.trim() || !!keywordInputError || credits === 0 || (credits !== null && targetCount > credits)}
           className="mt-3 inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
         >
           <Search className="w-4 h-4 mr-1.5" />
