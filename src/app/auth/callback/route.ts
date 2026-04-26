@@ -20,7 +20,8 @@ export async function GET(request: Request) {
         .eq("id", data.user.id)
         .single();
 
-      if (!existingUser) {
+      const isNewUser = !existingUser;
+      if (isNewUser) {
         await serviceClient.from("users").insert({
           id: data.user.id,
           email: data.user.email!,
@@ -29,7 +30,9 @@ export async function GET(request: Request) {
         });
       }
 
-      return NextResponse.redirect(`${origin}${redirectTo}`);
+      const separator = redirectTo.includes("?") ? "&" : "?";
+      const dest = isNewUser ? `${redirectTo}${separator}new_signup=1` : redirectTo;
+      return NextResponse.redirect(`${origin}${dest}`);
     }
   }
 

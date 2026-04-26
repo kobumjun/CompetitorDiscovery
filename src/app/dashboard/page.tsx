@@ -1,9 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useSWRConfig } from "swr";
 import { createClient } from "@/lib/supabase/client";
+import { fireSignupConversion } from "@/lib/gtag";
 import {
   ArrowRight,
   CheckCircle2,
@@ -92,6 +94,17 @@ function defaultComposer(): RowComposerState {
 
 export default function DashboardPage() {
   const { mutate: mutateGlobal } = useSWRConfig();
+  const searchParams = useSearchParams();
+  const signupFiredRef = useRef(false);
+
+  useEffect(() => {
+    if (signupFiredRef.current) return;
+    if (searchParams.get("new_signup") === "1") {
+      signupFiredRef.current = true;
+      fireSignupConversion();
+    }
+  }, [searchParams]);
+
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [recentLeads, setRecentLeads] = useState<ExtractedLead[]>([]);
   const [leadCount, setLeadCount] = useState(0);
