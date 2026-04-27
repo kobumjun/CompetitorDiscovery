@@ -121,8 +121,6 @@ export default function DashboardPage() {
   const [prospectError, setProspectError] = useState<string | null>(null);
   const [prospectResult, setProspectResult] = useState<BulkPayload | null>(null);
   const [rowComposers, setRowComposers] = useState<Record<string, RowComposerState>>({});
-  const pendingExampleRef = useRef<string | null>(null);
-
   useEffect(() => {
     async function fetchData() {
       const supabase = createClient();
@@ -237,19 +235,6 @@ export default function DashboardPage() {
     }
   }
 
-  function handleExampleClick(exampleQuery: string) {
-    setQuery(exampleQuery);
-    pendingExampleRef.current = exampleQuery;
-  }
-
-  useEffect(() => {
-    if (!pendingExampleRef.current) return;
-    if (query !== pendingExampleRef.current) return;
-    pendingExampleRef.current = null;
-    const timer = setTimeout(() => handleFindProspects(), 300);
-    return () => clearTimeout(timer);
-  }, [query]);
-
   async function handleGenerateAi(row: ProspectLead) {
     const key = rowKeyFor(row);
     const composer = rowComposers[key] ?? defaultComposer();
@@ -312,7 +297,7 @@ export default function DashboardPage() {
           Just click an example below — or type your own keyword.
         </p>
         {credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything && (
-          <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now — it&apos;s free</p>
+          <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now</p>
         )}
         <div className={cn("mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-4")}>
           {["web design agencies in London", "SaaS startups in NYC", "dental clinics in LA"].map((example, i) => (
@@ -326,7 +311,7 @@ export default function DashboardPage() {
                   ? "bg-orange-100 border-orange-300 hover:bg-orange-200"
                   : "bg-orange-50 border-orange-200 hover:bg-orange-100"
               )}
-              onClick={() => handleExampleClick(example)}
+              onClick={() => setQuery(example)}
             >
               {i === 0 && <span className="text-base leading-none">💡</span>}
               <span className={cn("text-xs sm:text-sm text-orange-700", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "font-medium" : "italic")}>
