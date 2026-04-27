@@ -97,6 +97,10 @@ Examples:
   → Query: "manufacturing company hiring employees contact"
   (NO "HR", NO "software" in the query)
 
+IMPORTANT: Your query must target a SPECIFIC type of business (e.g., "dental clinics", "law firms", "restaurants", "real estate agencies").
+Never search for generic terms like "small business" or "companies". Be specific about the buyer's industry.
+If the user doesn't specify a target, pick the most likely buyer industry.
+
 Return ONLY the search query string. Nothing else. No quotes. No explanation.`,
           },
           { role: "user", content: cleaned },
