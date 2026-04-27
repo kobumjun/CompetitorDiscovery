@@ -9,7 +9,7 @@ const SERPER_ENDPOINT = "https://google.serper.dev/search";
 const URL_TIMEOUT_MS = 4000;
 const OVERALL_TIMEOUT_MS = 55_000;
 const CONCURRENCY = 5;
-const GPT_TIMEOUT_MS = 3000;
+const GPT_TIMEOUT_MS = 2000;
 
 const BLOCKED_HOSTS = [
   "g2.com", "capterra.com", "techcrunch.com", "forbes.com",
@@ -25,6 +25,7 @@ const BLOCKED_HOSTS = [
 
 type SerperOrganicResult = { link?: string };
 type SerperResponse = { organic?: SerperOrganicResult[] };
+type ExtractedProspectRow = { email: string; source_url: string; company_name: string; host: string };
 
 function isBlockedHost(hostname: string) {
   return BLOCKED_HOSTS.some((b) => hostname === b || hostname.endsWith(`.${b}`));
@@ -55,25 +56,16 @@ async function generateBuyerQueries(keyword: string): Promise<string[]> {
         messages: [
           {
             role: "system",
-            content: `You are a cold outreach targeting expert.
+            content: `The user describes what they sell. Convert this into 3 Google search queries that find their potential CUSTOMERS (businesses that would BUY this).
 
-The user tells you what they SELL. You must find WHO WOULD BUY IT.
+Rules:
+- Find the BUYER industry, not the seller's industry
+- Example: "web design services" → search for restaurants, dentists, lawyers (they need websites)
+- Example: "HR software" → search for manufacturing, logistics, retail companies (they hire people)
+- Example: "dental equipment" → search for dental clinics, orthodontists (they buy equipment)
 
-ABSOLUTE RULE: The search queries must find CUSTOMERS, never competitors.
-- If user sells "web design" → find businesses that NEED a website (restaurants, dentists, plumbers, real estate agents) — NEVER web agencies
-- If user sells "HR software" → find companies that HIRE people (factories, logistics, retail chains) — NEVER other HR software companies
-- If user sells "Japanese courses" → find companies entering Japan market (exporters, consulting firms) — NEVER language schools
-
-YOUR OUTPUT QUERIES MUST NEVER CONTAIN THE WORDS THE USER SELLS.
-- User sells "web design" → queries must NOT contain "web design", "website", "digital", "agency", "marketing"
-- User sells "HR software" → queries must NOT contain "HR", "software", "SaaS", "tech"
-
-Instead, search for the BUYER'S industry directly:
-- "dentist office Chicago contact email"
-- "small restaurant owner London"
-- "real estate agency without website"
-
-Return ONLY a JSON array of 3 search queries. No explanation.`,
+Add a city or region if the user mentions one.
+Return ONLY a JSON array of 3 queries. No explanation.`,
           },
           { role: "user", content: keyword },
         ],
@@ -97,6 +89,97 @@ Return ONLY a JSON array of 3 search queries. No explanation.`,
   } catch (err) {
     console.log("[GPT 변환 실패, 원래 키워드 사용]", err instanceof Error ? err.message : err);
     return [];
+  }
+}
+
+function urlsReferToSameResult(rowUrl: string, filterUrl: string) {
+  if (rowUrl.includes(filterUrl) || filterUrl.includes(rowUrl)) return true;
+
+  try {
+    const rowHost = normalizeUrl(rowUrl)?.hostname.replace(/^www\./, "").toLowerCase();
+    const filterHost = normalizeUrl(filterUrl)?.hostname.replace(/^www\./, "").toLowerCase();
+    return Boolean(rowHost && filterHost && rowHost === filterHost);
+  } catch {
+    return false;
+  }
+}
+
+async function filterCustomerRows(keyword: string, rows: ExtractedProspectRow[]): Promise<ExtractedProspectRow[]> {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey || rows.length === 0) return rows;
+
+  try {
+    const filterResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openaiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        max_tokens: 300,
+        temperature: 0,
+        messages: [
+          {
+            role: "system",
+            content: `You are a B2B sales filter. The user sells a specific product/service. You will receive a list of companies found online. Your job: determine which companies are potential CUSTOMERS (would BUY from the user), and which are COMPETITORS (sell similar things).
+
+Return ONLY a JSON array of objects: [{"url": "...", "is_customer": true/false, "reason": "short reason"}]
+
+CRITICAL: A company is a COMPETITOR if it sells the same or similar service as the user. A company is a CUSTOMER if it would benefit from BUYING the user's service.
+
+Example: User sells "web design".
+- "Joe's Dental Clinic" → is_customer: true (needs a website)
+- "WebAgency Pro" → is_customer: false (competitor, also sells web design)
+- "Mario's Italian Restaurant" → is_customer: true (needs a website)`,
+          },
+          {
+            role: "user",
+            content: `I sell: "${keyword}"
+
+Companies found:
+${rows.map((row) => `- ${row.company_name} (${row.source_url})`).join("\n")}`,
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(GPT_TIMEOUT_MS),
+    });
+
+    const filterData = await filterResponse.json();
+    const filterText: string | undefined = filterData.choices?.[0]?.message?.content?.trim();
+    if (!filterText) return rows;
+
+    const parsed: unknown = JSON.parse(filterText);
+    if (!Array.isArray(parsed)) return rows;
+
+    const customerUrls = parsed
+      .filter((item): item is { url: string; is_customer: boolean } => (
+        typeof item === "object" &&
+        item !== null &&
+        "url" in item &&
+        "is_customer" in item &&
+        typeof item.url === "string" &&
+        item.is_customer === true
+      ))
+      .map((item) => item.url);
+
+    if (customerUrls.length === 0) return [];
+
+    const filteredRows = rows.filter((row) =>
+      customerUrls.some((url) => urlsReferToSameResult(row.source_url, url))
+    );
+    const removedCount = rows.length - filteredRows.length;
+
+    if (removedCount > 0) {
+      console.log(`[GPT 필터] ${removedCount}개 경쟁사 제거, ${filteredRows.length}개 타겟 유지`);
+    } else {
+      console.log("[GPT 필터] 제거된 경쟁사 없음");
+    }
+
+    return filteredRows;
+  } catch (err) {
+    console.log("[GPT 필터 실패, 전체 결과 유지]", err instanceof Error ? err.message : err);
+    return rows;
   }
 }
 
@@ -267,7 +350,7 @@ export async function POST(request: NextRequest) {
     // ── Crawl & extract (deduplicate by email address only) ──
     const seenEmails = new Set<string>();
     const failures: { url: string; reason: string }[] = [];
-    const uniqueRows: { email: string; source_url: string; company_name: string; host: string }[] = [];
+    let uniqueRows: ExtractedProspectRow[] = [];
     let processedCount = 0;
     let cursor = 0;
 
@@ -315,6 +398,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[search-prospects] Crawl done — found:", uniqueRows.length, "failed:", failures.length, "elapsed:", Date.now() - startTime, "ms");
+
+    // ── Filter out competitors after extraction, before charging/persisting ──
+    uniqueRows = await filterCustomerRows(query.trim(), uniqueRows);
 
     // ── Persist results ──
     const service = await createServiceClient();
