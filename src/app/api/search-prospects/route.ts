@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { reserveCredits, refundCredits } from "@/lib/credits";
 import { deriveCompanyNameFromHost, extractWebsiteEmails, normalizeUrl } from "@/lib/leads/extraction";
@@ -9,6 +10,7 @@ const SERPER_ENDPOINT = "https://google.serper.dev/search";
 const URL_TIMEOUT_MS = 4000;
 const OVERALL_TIMEOUT_MS = 55_000;
 const CONCURRENCY = 5;
+const OPENAI_TIMEOUT_MS = 2000;
 
 const BLOCKED_HOSTS = [
   "g2.com", "capterra.com", "techcrunch.com", "forbes.com",
@@ -34,6 +36,43 @@ function buildSearchQuery(input: string): string {
   if (q.split(/\s+/).length <= 2) return `${q} company official site`;
   if (!/official|contact/i.test(q)) return `${q} official site contact`;
   return q;
+}
+
+async function generateBuyerQueries(userInput: string): Promise<string[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [];
+
+  try {
+    const openai = new OpenAI({ apiKey });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a B2B sales targeting expert. The user will describe what they sell. Your job is to identify WHO would BUY this — not competitors, but potential customers. Return 3 Google search queries that would find potential buyer companies. Each query should target a different buyer segment. Return ONLY a JSON array of 3 search query strings, nothing else.",
+        },
+        { role: "user", content: userInput },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.7,
+      max_tokens: 200,
+    }, { signal: controller.signal });
+
+    clearTimeout(timer);
+
+    const raw = response.choices[0]?.message?.content;
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    const queries: string[] = Array.isArray(parsed) ? parsed : parsed.queries ?? parsed.search_queries ?? [];
+    return queries.filter((q): q is string => typeof q === "string" && q.trim().length > 0).slice(0, 3);
+  } catch (err) {
+    console.warn("[search-prospects] OpenAI buyer-query generation failed, using fallback:", err instanceof Error ? err.message : err);
+    return [];
+  }
 }
 
 async function runWithConcurrency<TInput, TOutput>(
@@ -105,19 +144,72 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     const isTimedOut = () => Date.now() - startTime > OVERALL_TIMEOUT_MS;
 
-    // ── Call Serper API ──
-    const enhancedQuery = buildSearchQuery(query);
-    const serperNum = Math.min(100, targetCount * 4);
-    console.log("[search-prospects] Serper query:", enhancedQuery, "num:", serperNum);
+    // ── Generate buyer-targeting queries via OpenAI ──
+    const buyerQueries = await generateBuyerQueries(query);
+    const useBuyerQueries = buyerQueries.length >= 2;
+    console.log("[search-prospects] Buyer queries:", useBuyerQueries ? buyerQueries : "fallback to direct search");
 
-    let serperPayload: SerperResponse;
-    try {
+    // ── Call Serper API ──
+    let candidates: string[];
+
+    if (useBuyerQueries) {
+      let queriesToRun: string[];
+      if (targetCount <= 2) {
+        queriesToRun = [buyerQueries[0]];
+      } else if (targetCount === 3) {
+        queriesToRun = buyerQueries.slice(0, 3);
+      } else {
+        queriesToRun = buyerQueries.slice(0, 3);
+      }
+
+      const perQueryNum = Math.min(30, Math.max(8, Math.ceil((targetCount * 4) / queriesToRun.length)));
+      console.log("[search-prospects] Running", queriesToRun.length, "Serper queries, num per query:", perQueryNum);
+
+      const allOrganic: SerperOrganicResult[] = [];
+      for (const sq of queriesToRun) {
+        if (isTimedOut()) break;
+        try {
+          const serperRes = await fetch(SERPER_ENDPOINT, {
+            method: "POST",
+            headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
+            body: JSON.stringify({ q: sq, num: perQueryNum }),
+          });
+          if (!serperRes.ok) {
+            const errorBody = await serperRes.text().catch(() => "");
+            console.warn("[search-prospects] Serper error for query:", sq, serperRes.status, errorBody.slice(0, 200));
+            if (serperRes.status === 429) {
+              throw new Error("Daily search limit reached. Try again tomorrow or contact support.");
+            }
+            continue;
+          }
+          const payload = (await serperRes.json()) as SerperResponse;
+          console.log("[search-prospects] Serper OK for:", sq, "results:", payload.organic?.length ?? 0);
+          allOrganic.push(...(payload.organic ?? []));
+        } catch (err) {
+          if (err instanceof Error && err.message.includes("Daily search limit")) throw err;
+          console.warn("[search-prospects] Serper call failed for query:", sq, err instanceof Error ? err.message : err);
+        }
+      }
+
+      const seenLinks = new Set<string>();
+      candidates = allOrganic
+        .map((r) => r.link?.trim() || "")
+        .filter(Boolean)
+        .map((url) => normalizeUrl(url))
+        .filter((url): url is URL => Boolean(url))
+        .filter((url) => !isBlockedHost(url.hostname.replace(/^www\./, "").toLowerCase()))
+        .map((url) => url.toString())
+        .filter((url) => { if (seenLinks.has(url)) return false; seenLinks.add(url); return true; });
+    } else {
+      const enhancedQuery = buildSearchQuery(query);
+      const serperNum = Math.min(100, targetCount * 4);
+      console.log("[search-prospects] Fallback Serper query:", enhancedQuery, "num:", serperNum);
+
       const serperRes = await fetch(SERPER_ENDPOINT, {
         method: "POST",
         headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({ q: enhancedQuery, num: serperNum }),
       });
-      console.log("[search-prospects] Serper status:", serperRes.status);
 
       if (!serperRes.ok) {
         const errorBody = await serperRes.text().catch(() => "");
@@ -128,21 +220,17 @@ export async function POST(request: NextRequest) {
         throw new Error(`Serper API returned ${serperRes.status}: ${errorBody.slice(0, 100)}`);
       }
 
-      serperPayload = (await serperRes.json()) as SerperResponse;
+      const serperPayload = (await serperRes.json()) as SerperResponse;
       console.log("[search-prospects] Serper OK — results:", serperPayload.organic?.length ?? 0);
-    } catch (serperErr) {
-      console.error("[search-prospects] Serper call failed:", serperErr instanceof Error ? serperErr.message : serperErr);
-      throw serperErr;
-    }
 
-    // ── Filter candidates (blocklist only, no seen-hosts filter) ──
-    const candidates = (serperPayload.organic ?? [])
-      .map((r) => r.link?.trim() || "")
-      .filter(Boolean)
-      .map((url) => normalizeUrl(url))
-      .filter((url): url is URL => Boolean(url))
-      .filter((url) => !isBlockedHost(url.hostname.replace(/^www\./, "").toLowerCase()))
-      .map((url) => url.toString());
+      candidates = (serperPayload.organic ?? [])
+        .map((r) => r.link?.trim() || "")
+        .filter(Boolean)
+        .map((url) => normalizeUrl(url))
+        .filter((url): url is URL => Boolean(url))
+        .filter((url) => !isBlockedHost(url.hostname.replace(/^www\./, "").toLowerCase()))
+        .map((url) => url.toString());
+    }
 
     console.log("[search-prospects] Candidates after blocklist filter:", candidates.length);
 

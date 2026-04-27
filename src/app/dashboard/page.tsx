@@ -300,7 +300,7 @@ export default function DashboardPage() {
           <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now</p>
         )}
         <div className={cn("mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-4")}>
-          {["web design agencies in London", "SaaS startups in NYC", "dental clinics in LA"].map((example, i) => (
+          {["I sell web design services", "I sell HR software for startups", "I sell dental equipment"].map((example, i) => (
             <button
               key={example}
               type="button"
@@ -322,7 +322,7 @@ export default function DashboardPage() {
         </div>
         <input
           className={cn("input-field mt-2 h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
-          placeholder="Type your target industry + location, e.g. 'dental clinics in LA'"
+          placeholder="Describe what you sell, e.g. 'Japanese language courses' or 'web design services in London'"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />

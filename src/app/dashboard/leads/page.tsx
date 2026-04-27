@@ -451,16 +451,16 @@ export default function LeadsPage() {
         <button
           type="button"
           className="mb-2 flex items-center gap-1.5 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-left transition-colors hover:bg-orange-100"
-          onClick={() => setKeyword("web design agencies in London")}
+          onClick={() => setKeyword("I sell web design services")}
         >
           <span className="text-base leading-none">💡</span>
           <span className="text-xs sm:text-sm text-orange-700 italic">
-            Try: &quot;web design agencies in London&quot; or &quot;SaaS startups in NYC&quot;
+            Try: &quot;I sell web design services&quot; or &quot;I sell HR software for startups&quot;
           </span>
         </button>
         <input
           className={cn("input-field h-12", keywordInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
-          placeholder="Type your target industry + location, e.g. 'dental clinics in LA'"
+          placeholder="Describe what you sell, e.g. 'Japanese language courses' or 'web design services in London'"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
         />
