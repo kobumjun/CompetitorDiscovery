@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { reserveCredits, refundCredits } from "@/lib/credits";
 import { deriveCompanyNameFromHost, extractWebsiteEmails, normalizeUrl } from "@/lib/leads/extraction";
@@ -10,7 +9,7 @@ const SERPER_ENDPOINT = "https://google.serper.dev/search";
 const URL_TIMEOUT_MS = 4000;
 const OVERALL_TIMEOUT_MS = 55_000;
 const CONCURRENCY = 5;
-const OPENAI_TIMEOUT_MS = 2000;
+const GPT_TIMEOUT_MS = 3000;
 
 const BLOCKED_HOSTS = [
   "g2.com", "capterra.com", "techcrunch.com", "forbes.com",
@@ -38,61 +37,60 @@ function buildSearchQuery(input: string): string {
   return q;
 }
 
-async function generateBuyerQueries(userInput: string): Promise<string[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return [];
+async function generateBuyerQueries(keyword: string): Promise<string[]> {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) return [];
 
   try {
-    const openai = new OpenAI({ apiKey });
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            `You are a B2B lead generation expert.
-
-The user will describe what they SELL (a product or service).
-Your job: identify WHO BUYS THIS — meaning real potential customer companies.
+    const gptResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openaiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        max_tokens: 200,
+        temperature: 0.7,
+        messages: [
+          {
+            role: "system",
+            content: `You are a B2B lead generation expert. The user describes what they SELL. Your job: find WHO BUYS THIS.
 
 CRITICAL RULES:
 - NEVER return competitors or similar tools/services
-- NEVER return companies in the same industry as what they sell
-- Return companies that would PAY MONEY to hire or buy from this person
-- Think like a salesperson prospecting for clients
+- NEVER return companies in the same industry
+- Return companies that would PAY MONEY to buy from this person
+- Think: who is the CUSTOMER, not the competitor?
 
 Examples:
-- "I sell web design services" → Search for: local businesses without good websites (restaurants, dentists, lawyers, real estate agents, small retailers)
-- "I sell HR software" → Search for: mid-size companies with growing teams, manufacturing companies, logistics firms
-- "I sell Japanese language courses" → Search for: companies expanding to Japan, import/export firms, international schools
+- "I sell web design services" → ["restaurants needing website Chicago", "dental clinics without website", "small law firms looking for web presence"]
+- "I sell HR software" → ["manufacturing companies hiring employees", "logistics firms growing teams", "retail chains HR department"]
+- "Japanese language courses" → ["companies expanding to Japan", "import export firms Japan", "international schools Tokyo"]
 
-Return a JSON object with a "queries" key containing an array of exactly 3 Google search queries.
-Each query should find a DIFFERENT type of potential buyer company.
-Queries should be specific enough to return real business websites.
-Return ONLY the JSON object. No explanation. No markdown.
+Return ONLY a JSON array of exactly 3 search queries. No explanation. No markdown.`,
+          },
+          { role: "user", content: keyword },
+        ],
+      }),
+      signal: AbortSignal.timeout(GPT_TIMEOUT_MS),
+    });
 
-Example output format:
-{"queries": ["small restaurant businesses London website", "dental clinics Chicago no website contact", "local law firms UK digital presence"]}`,
-        },
-        { role: "user", content: userInput },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-      max_tokens: 200,
-    }, { signal: controller.signal });
+    const gptData = await gptResponse.json();
+    const gptText: string | undefined = gptData.choices?.[0]?.message?.content?.trim();
 
-    clearTimeout(timer);
-
-    const raw = response.choices[0]?.message?.content;
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const queries: string[] = Array.isArray(parsed) ? parsed : parsed.queries ?? parsed.search_queries ?? [];
-    return queries.filter((q): q is string => typeof q === "string" && q.trim().length > 0).slice(0, 3);
+    if (gptText) {
+      const parsed = JSON.parse(gptText);
+      const arr: unknown[] = Array.isArray(parsed) ? parsed : parsed.queries ?? parsed.search_queries ?? [];
+      const queries = arr.filter((q): q is string => typeof q === "string" && q.trim().length > 0).slice(0, 3);
+      if (queries.length > 0) {
+        console.log("[GPT 변환 성공]", queries);
+        return queries;
+      }
+    }
+    return [];
   } catch (err) {
-    console.warn("[search-prospects] OpenAI buyer-query generation failed, using fallback:", err instanceof Error ? err.message : err);
+    console.log("[GPT 변환 실패, 원래 키워드 사용]", err instanceof Error ? err.message : err);
     return [];
   }
 }
