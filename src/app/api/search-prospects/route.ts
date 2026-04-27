@@ -10,8 +10,6 @@ const URL_TIMEOUT_MS = 4000;
 const OVERALL_TIMEOUT_MS = 55_000;
 const CONCURRENCY = 5;
 const GPT_TIMEOUT_MS = 2000;
-const GPT_PRECRAWL_FILTER_MS = 4000;
-const GPT_PRECRAWL_FILTER_MAX_ORGANIC = 40;
 
 const BLOCKED_HOSTS = [
   "g2.com", "capterra.com", "techcrunch.com", "forbes.com",
@@ -28,6 +26,7 @@ const BLOCKED_HOSTS = [
 type SerperOrganicResult = { link?: string; title?: string; snippet?: string };
 type SerperResponse = { organic?: SerperOrganicResult[] };
 type ExtractedProspectRow = { email: string; source_url: string; company_name: string; host: string };
+type BuyerSearchPlan = { queries: string[]; competitor_keywords: string[] };
 
 function isBlockedHost(hostname: string) {
   return BLOCKED_HOSTS.some((b) => hostname === b || hostname.endsWith(`.${b}`));
@@ -40,9 +39,14 @@ function buildSearchQuery(input: string): string {
   return q;
 }
 
-async function generateBuyerQueries(keyword: string): Promise<string[]> {
+function stripJsonFences(text: string) {
+  return text.replace(/```json\n?/gi, "").replace(/```/g, "").trim();
+}
+
+async function generateBuyerSearchPlan(keyword: string): Promise<BuyerSearchPlan> {
+  const empty: BuyerSearchPlan = { queries: [], competitor_keywords: [] };
   const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) return [];
+  if (!openaiKey) return empty;
 
   try {
     const gptResponse = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -53,21 +57,30 @@ async function generateBuyerQueries(keyword: string): Promise<string[]> {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 200,
+        max_tokens: 400,
         temperature: 0.7,
+        response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
-            content: `The user describes what they sell. Convert this into 3 Google search queries that find their potential CUSTOMERS (businesses that would BUY this).
+            content: `The user describes what they SELL. Do two things:
 
-Rules:
-- Find the BUYER industry, not the seller's industry
-- Example: "web design services" → search for restaurants, dentists, lawyers (they need websites)
-- Example: "HR software" → search for manufacturing, logistics, retail companies (they hire people)
-- Example: "dental equipment" → search for dental clinics, orthodontists (they buy equipment)
+1. Generate 3 Google search queries to find potential CUSTOMERS (businesses that would BUY this - not competitors)
+2. List keywords that would identify COMPETITORS in search results (companies selling the same thing)
 
-Add a city or region if the user mentions one.
-Return ONLY a JSON array of 3 queries. No explanation.`,
+CUSTOMER = would pay money to buy from the user
+COMPETITOR = sells the same or similar product/service
+
+Return ONLY this JSON (no explanation):
+{
+  "queries": ["query1", "query2", "query3"],
+  "competitor_keywords": ["keyword1", "keyword2", "keyword3"]
+}
+
+Examples:
+- User sells "fitness coaching" → queries find gyms/corporates needing wellness, competitor_keywords: ["fitness coach", "personal trainer", "fitness coaching", "training program"]
+- User sells "coffee machines" → queries find cafes/offices, competitor_keywords: ["coffee machine", "espresso machine", "coffee equipment"]
+- User sells "web design" → queries find restaurants/dentists/lawyers, competitor_keywords: ["web design", "web agency", "digital agency", "website builder"]`,
           },
           { role: "user", content: keyword },
         ],
@@ -77,25 +90,32 @@ Return ONLY a JSON array of 3 queries. No explanation.`,
 
     const gptData = await gptResponse.json();
     const gptText: string | undefined = gptData.choices?.[0]?.message?.content?.trim();
+    if (!gptText) return empty;
 
-    if (gptText) {
-      const parsed = JSON.parse(gptText);
-      const arr: unknown[] = Array.isArray(parsed) ? parsed : parsed.queries ?? parsed.search_queries ?? [];
-      const queries = arr.filter((q): q is string => typeof q === "string" && q.trim().length > 0).slice(0, 3);
-      if (queries.length > 0) {
-        console.log("[GPT 변환 성공]", queries);
-        return queries;
-      }
+    const parsed = JSON.parse(stripJsonFences(gptText)) as {
+      queries?: unknown;
+      competitor_keywords?: unknown;
+    };
+    const queries = Array.isArray(parsed.queries)
+      ? parsed.queries
+          .filter((q): q is string => typeof q === "string" && q.trim().length > 0)
+          .map((q) => q.trim())
+          .slice(0, 3)
+      : [];
+    const competitor_keywords = Array.isArray(parsed.competitor_keywords)
+      ? parsed.competitor_keywords
+          .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+          .map((k) => k.trim())
+      : [];
+
+    if (queries.length > 0) {
+      console.log("[GPT 변환 성공]", queries, "competitor_keywords:", competitor_keywords);
     }
-    return [];
+    return { queries, competitor_keywords };
   } catch (err) {
     console.log("[GPT 변환 실패, 원래 키워드 사용]", err instanceof Error ? err.message : err);
-    return [];
+    return empty;
   }
-}
-
-function stripJsonFences(text: string) {
-  return text.replace(/```json\n?/gi, "").replace(/```/g, "").trim();
 }
 
 function normalizedSerperLink(link: string): string | null {
@@ -120,93 +140,25 @@ function dedupeBlocklistOrganic(organic: SerperOrganicResult[]): SerperOrganicRe
   return out;
 }
 
-async function filterSerperOrganicBeforeCrawl(keyword: string, organicRows: SerperOrganicResult[]): Promise<SerperOrganicResult[]> {
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey || organicRows.length === 0 || !keyword.trim()) return organicRows;
+function filterOrganicByCompetitorKeywords(
+  serperOrganic: SerperOrganicResult[],
+  competitorKeywords: string[]
+): SerperOrganicResult[] {
+  const kws = competitorKeywords.map((k) => k.toLowerCase().trim()).filter(Boolean);
+  if (kws.length === 0) return serperOrganic;
 
-  const head = organicRows.slice(0, GPT_PRECRAWL_FILTER_MAX_ORGANIC);
-  const tail = organicRows.slice(GPT_PRECRAWL_FILTER_MAX_ORGANIC);
-  const before = head.length;
-
-  try {
-    const filterRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        max_tokens: 300,
-        temperature: 0,
-        messages: [
-          {
-            role: "system",
-            content: `The user sells something. You see a list of websites found on Google. Decide which are potential CUSTOMERS vs COMPETITORS.
-
-CUSTOMER = would BUY from the user
-COMPETITOR = sells the same or similar thing
-
-Examples:
-- User sells "dental equipment": dental clinic = CUSTOMER, dental equipment supplier = COMPETITOR
-- User sells "coffee machines": café/restaurant = CUSTOMER, coffee machine seller = COMPETITOR
-- User sells "web design": restaurant/dentist/lawyer = CUSTOMER, web agency = COMPETITOR
-- User sells "HR software": manufacturing company/retail chain = CUSTOMER, HR software company = COMPETITOR
-
-Return ONLY JSON array: [{"link":"...","keep":true}] or [{"link":"...","keep":false}]`,
-          },
-          {
-            role: "user",
-            content: `I sell: "${keyword}"
-
-Websites:
-${head.map((r) => `- ${r.title ?? ""} | ${r.link ?? ""} | ${r.snippet ?? ""}`).join("\n")}`,
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(GPT_PRECRAWL_FILTER_MS),
-    });
-
-    const filterJson = await filterRes.json();
-    const filterText: string | undefined = filterJson.choices?.[0]?.message?.content?.trim();
-    if (!filterText) return organicRows;
-
-    const parsed: unknown = JSON.parse(stripJsonFences(filterText));
-    if (!Array.isArray(parsed)) return organicRows;
-
-    const keepLinksNorm = parsed
-      .filter((p): p is { link: string; keep: boolean } => (
-        typeof p === "object" &&
-        p !== null &&
-        "link" in p &&
-        "keep" in p &&
-        typeof p.link === "string" &&
-        p.keep === true
-      ))
-      .map((p) => normalizedSerperLink(p.link))
-      .filter((x): x is string => Boolean(x));
-
-    if (keepLinksNorm.length === 0) return organicRows;
-
-    const keptHead = head.filter((row) => {
-      const rowNorm = normalizedSerperLink(row.link ?? "");
-      if (!rowNorm) return false;
-      return keepLinksNorm.some((k) => k === rowNorm);
-    });
-
-    if (keptHead.length === 0) {
-      console.warn("[search-prospects] GPT 필터 keep 링크와 Serper URL 불일치, 필터 스킵");
-      return organicRows;
+  const before = serperOrganic.length;
+  const filteredResults = serperOrganic.filter((result) => {
+    const text = `${result.title ?? ""} ${result.snippet ?? ""} ${result.link ?? ""}`.toLowerCase();
+    const isCompetitor = kws.some((kw) => text.includes(kw.toLowerCase()));
+    if (isCompetitor) {
+      console.log(`[필터 제거] ${result.title ?? ""} - ${result.link ?? ""}`);
     }
+    return !isCompetitor;
+  });
 
-    const suffix = tail.length > 0 ? ` (+${tail.length}개는 GPT 미적용)` : "";
-    console.log(`[GPT 필터] ${before}개 → ${keptHead.length}개 유지${suffix}`);
-
-    return [...keptHead, ...tail];
-  } catch (err) {
-    console.log("[GPT 필터 타임아웃, 전체 크롤링]", err instanceof Error ? err.message : err);
-    return organicRows;
-  }
+  console.log(`[키워드 필터] ${before}개 → ${filteredResults.length}개 유지`);
+  return filteredResults.length > 0 ? filteredResults : serperOrganic;
 }
 
 async function runWithConcurrency<TInput, TOutput>(
@@ -278,8 +230,10 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     const isTimedOut = () => Date.now() - startTime > OVERALL_TIMEOUT_MS;
 
-    // ── Generate buyer-targeting queries via OpenAI ──
-    const buyerQueries = await generateBuyerQueries(query);
+    // ── GPT: search queries + competitor keywords (single call, 2s timeout) ──
+    const buyerPlan = await generateBuyerSearchPlan(query.trim());
+    const buyerQueries = buyerPlan.queries;
+    const competitorKeywords = buyerPlan.competitor_keywords;
     const useBuyerQueries = buyerQueries.length >= 2;
     console.log("[search-prospects] Buyer queries:", useBuyerQueries ? buyerQueries : "fallback to direct search");
 
@@ -326,7 +280,7 @@ export async function POST(request: NextRequest) {
       }
 
       let mergedOrganic = dedupeBlocklistOrganic(allOrganic);
-      mergedOrganic = await filterSerperOrganicBeforeCrawl(query.trim(), mergedOrganic);
+      mergedOrganic = filterOrganicByCompetitorKeywords(mergedOrganic, competitorKeywords);
       candidates = mergedOrganic.map((r) => r.link ?? "").filter(Boolean);
     } else {
       const enhancedQuery = buildSearchQuery(query);
@@ -352,7 +306,7 @@ export async function POST(request: NextRequest) {
       console.log("[search-prospects] Serper OK — results:", serperPayload.organic?.length ?? 0);
 
       let mergedOrganic = dedupeBlocklistOrganic(serperPayload.organic ?? []);
-      mergedOrganic = await filterSerperOrganicBeforeCrawl(query.trim(), mergedOrganic);
+      mergedOrganic = filterOrganicByCompetitorKeywords(mergedOrganic, competitorKeywords);
       candidates = mergedOrganic.map((r) => r.link ?? "").filter(Boolean);
     }
 
