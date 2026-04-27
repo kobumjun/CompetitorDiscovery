@@ -28,6 +28,85 @@ type SerperResponse = { organic?: SerperOrganicResult[] };
 type ExtractedProspectRow = { email: string; source_url: string; company_name: string; host: string };
 const MAX_CRAWL_URLS = 3;
 const SERPER_NUM_RESULTS = 10;
+const GPT_TIMEOUT_MS = 4000;
+
+const SERPER_QUERY_SYSTEM = `The user describes what they sell.
+Return ONE simple Google search query to find businesses that would BUY this.
+
+Your query must be a simple industry name + "contact email". Nothing fancy.
+
+Examples:
+- "coffee machines" → "cafes and restaurants contact email"
+- "web design" → "law firms contact email"
+- "accounting services" → "small construction companies contact email"
+- "dental equipment" → "dental clinics contact email"
+- "HR software" → "manufacturing companies hiring contact email"
+- "fitness coaching" → "corporate offices HR department contact email"
+- "office furniture" → "coworking spaces contact email"
+
+Keep it short. Just: [buyer industry] contact email
+Return ONLY the query. No quotes. No explanation.`;
+
+function stripSellPrefixes(raw: string) {
+  return raw.replace(/^(i sell|i offer|we sell|we offer|i provide|we provide|selling)\s+/i, "").trim();
+}
+
+function normalizeGptSerperQuery(text: string): string {
+  const line = text.trim().split("\n")[0]?.trim() ?? "";
+  const unquoted = line.replace(/^["'`]+|["'`]+$/g, "").trim();
+  return unquoted;
+}
+
+async function buildSerperQueryFromGpt(userSellDescription: string, cleaned: string): Promise<string> {
+  const fallback = `businesses that need ${cleaned || userSellDescription} contact email`;
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.log("[search-prospects] No OPENAI_API_KEY, using fallback Serper query");
+    return fallback;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GPT_TIMEOUT_MS);
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        max_tokens: 80,
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: SERPER_QUERY_SYSTEM },
+          { role: "user", content: userSellDescription },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      console.warn("[search-prospects] OpenAI HTTP", response.status);
+      return fallback;
+    }
+
+    const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+    const raw = data.choices?.[0]?.message?.content;
+    const q = typeof raw === "string" ? normalizeGptSerperQuery(raw) : "";
+    if (q.length > 0) {
+      console.log("[search-prospects] GPT Serper query:", q);
+      return q;
+    }
+  } catch (e) {
+    console.log("[search-prospects] GPT Serper query failed, fallback:", e instanceof Error ? e.message : e);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  return fallback;
+}
 
 function isBlockedHost(hostname: string) {
   return BLOCKED_HOSTS.some((b) => hostname === b || hostname.endsWith(`.${b}`));
@@ -124,9 +203,10 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     const isTimedOut = () => Date.now() - startTime > OVERALL_TIMEOUT_MS;
 
-    // Query is already the target buyer industry selected by the user.
-    const serperQuery = `${query.trim()} contact email`;
-    console.log("[search-prospects] Serper query (target):", serperQuery);
+    const keyword = query.trim();
+    const cleaned = stripSellPrefixes(keyword) || keyword;
+    const serperQuery = await buildSerperQueryFromGpt(keyword, cleaned);
+    console.log("[search-prospects] Serper query:", serperQuery);
 
     // ── Serper: 1회만 ──
     const serperRes = await fetch(SERPER_ENDPOINT, {
@@ -148,9 +228,24 @@ export async function POST(request: NextRequest) {
     const serperOrganic = serperPayload.organic ?? [];
     console.log("[search-prospects] Serper OK — organic:", serperOrganic.length);
 
-    const mergedOrganic = dedupeBlocklistOrganic(serperOrganic);
-    const toScrape = mergedOrganic.slice(0, MAX_CRAWL_URLS);
-    console.log(`[search-prospects] ${serperOrganic.length}개 → ${mergedOrganic.length}개 → ${toScrape.length}개 크롤링`);
+    const competitorKeywords = cleaned
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+
+    const filtered = serperOrganic.filter((result) => {
+      const titleAndLink = `${result.title || ""} ${result.link || ""}`.toLowerCase();
+      return !competitorKeywords.some((w) => titleAndLink.includes(w));
+    });
+
+    const toScrapeOrganic =
+      filtered.length > 0 ? filtered.slice(0, targetCount) : serperOrganic.slice(0, targetCount);
+
+    const mergedOrganic = dedupeBlocklistOrganic(toScrapeOrganic);
+    const toScrape = mergedOrganic.slice(0, Math.min(MAX_CRAWL_URLS, targetCount, mergedOrganic.length));
+    console.log(
+      `[search-prospects] organic ${serperOrganic.length} → filtered ${filtered.length} → deduped ${mergedOrganic.length} → crawl ${toScrape.length}`
+    );
 
     const candidates: string[] = toScrape.map((r) => r.link ?? "").filter(Boolean);
 
@@ -230,7 +325,7 @@ export async function POST(request: NextRequest) {
             source_url: row.source_url,
             company_name: row.company_name,
             emails: [{ email: row.email, source: row.source_url, confidence: row.email.startsWith("info@") || row.email.startsWith("hello@") ? "medium" : "high" }],
-            search_keyword: query.trim(),
+            search_keyword: keyword,
           })
           .select("id")
           .single();

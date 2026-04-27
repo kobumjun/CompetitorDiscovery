@@ -50,11 +50,6 @@ type BulkPayload = {
   message?: string;
 };
 
-type TargetSuggestion = {
-  label: string;
-  query: string;
-};
-
 type RowComposerState = {
   open: boolean;
   outreachType: OutreachType;
@@ -126,10 +121,6 @@ export default function DashboardPage() {
   const [prospectError, setProspectError] = useState<string | null>(null);
   const [prospectResult, setProspectResult] = useState<BulkPayload | null>(null);
   const [rowComposers, setRowComposers] = useState<Record<string, RowComposerState>>({});
-  const [targetSuggestions, setTargetSuggestions] = useState<TargetSuggestion[]>([]);
-  const [targetLoading, setTargetLoading] = useState(false);
-  const [targetError, setTargetError] = useState<string | null>(null);
-  const [customTarget, setCustomTarget] = useState("");
   useEffect(() => {
     async function fetchData() {
       const supabase = createClient();
@@ -170,7 +161,7 @@ export default function DashboardPage() {
   const queryInputError = queryHasEmail
     ? "This isn't for email addresses — describe the type of business you want to reach instead."
     : queryHasUrl
-      ? "Looks like a URL — use 'Already have URLs? Extract in bulk' below."
+      ? "Looks like a URL — use 'Already have a list of URLs? Extract in bulk' below."
       : null;
 
   const total = proposals.length;
@@ -195,37 +186,10 @@ export default function DashboardPage() {
     });
   }
 
-  async function suggestTargetsFor(rawKeyword = query) {
-    const keyword = rawKeyword.trim();
-    const hasInvalidInput = keyword.includes("@") || /https?:\/\/|www\.|\.com\b|\.io\b|\.org\b|\.net\b/i.test(keyword);
-    if (!keyword || hasInvalidInput) return;
-    setQuery(keyword);
-    setTargetLoading(true);
-    setTargetError(null);
-    setTargetSuggestions([]);
-    setCustomTarget("");
-    try {
-      const res = await fetch("/api/suggest-targets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword }),
-      });
-      const payload = (await res.json()) as TargetSuggestion[] | { targets?: TargetSuggestion[]; error?: string };
-      if (!res.ok) {
-        setTargetError(!Array.isArray(payload) ? payload.error || "Could not suggest targets. Try typing one below." : "Could not suggest targets. Try typing one below.");
-        return;
-      }
-      setTargetSuggestions(Array.isArray(payload) ? payload : payload.targets ?? []);
-    } catch {
-      setTargetError("Could not suggest targets. Try typing one below.");
-    } finally {
-      setTargetLoading(false);
-    }
-  }
-
-  async function handleFindProspects(targetOverride?: string) {
-    const selectedTarget = (targetOverride ?? customTarget).trim();
+  async function handleFindProspects() {
+    const selectedTarget = query.trim();
     if (!selectedTarget) return;
+    const count = Math.min(20, Math.max(1, targetCount));
     setProspectLoading(true);
     setProspectError(null);
     setProspectResult(null);
@@ -235,14 +199,14 @@ export default function DashboardPage() {
     const timerA = setTimeout(() => setProgress("Found companies. Extracting emails..."), 2000);
     const timerB = setTimeout(() => setProgress("Almost done..."), 5000);
     const counterTimer = setInterval(() => {
-      setProcessingCounter((prev) => Math.min(prev + 1, targetCount));
+      setProcessingCounter((prev) => Math.min(prev + 1, count));
     }, 2000);
 
     try {
       const searchRes = await fetch("/api/search-prospects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: selectedTarget, requestedCount: targetCount }),
+        body: JSON.stringify({ query: selectedTarget, requestedCount: count }),
       });
       const searchPayload = await searchRes.json();
       if (!searchRes.ok) {
@@ -332,28 +296,27 @@ export default function DashboardPage() {
           Find your first leads in 10 seconds
         </h2>
         <p className="mt-2 text-sm sm:text-base text-ink-600">
-          Tell us what you sell, then pick who you want to reach.
+          Describe what you sell — we&apos;ll find your ideal customers.
         </p>
         {credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything && (
           <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now</p>
         )}
-        <div className={cn("mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-4")}>
-          {["coffee machines", "accounting services", "web design"].map((example, i) => (
+        <div className={cn("mt-3 flex flex-wrap gap-2", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-4")}>
+          {["coffee machines", "accounting services", "web design"].map((text) => (
             <button
-              key={example}
+              key={text}
               type="button"
-              disabled={targetLoading || prospectLoading}
+              disabled={prospectLoading}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50",
+                "inline-flex items-center rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50",
                 credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything
                   ? "bg-orange-100 border-orange-300 hover:bg-orange-200"
                   : "bg-orange-50 border-orange-200 hover:bg-orange-100"
               )}
-              onClick={() => void suggestTargetsFor(example)}
+              onClick={() => setQuery(text)}
             >
-              {i === 0 && <span className="text-base leading-none">💡</span>}
               <span className={cn("text-xs sm:text-sm text-orange-700", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "font-medium" : "italic")}>
-                {example}
+                {text}
               </span>
             </button>
           ))}
@@ -361,75 +324,25 @@ export default function DashboardPage() {
         <label className="mt-4 block text-sm font-medium text-ink-700">What do you sell?</label>
         <input
           className={cn("input-field mt-2 h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
-          placeholder="e.g. coffee machines, web design, accounting services"
+          placeholder="Describe what you sell, e.g. 'coffee machines' or 'web design services'"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") void suggestTargetsFor();
+            if (e.key === "Enter") void handleFindProspects();
           }}
         />
         {queryInputError && (
           <p className="mt-1.5 text-sm text-red-600">{queryInputError}</p>
         )}
-        <button
-          type="button"
-          className="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-4 py-2.5 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-50 sm:w-auto"
-          onClick={() => void suggestTargetsFor()}
-          disabled={targetLoading || prospectLoading || !query.trim() || !!queryInputError}
-        >
-          {targetLoading ? "Finding targets..." : "Find Targets"}
-        </button>
-        {targetError && <p className="mt-2 text-sm text-red-600">{targetError}</p>}
-        {targetSuggestions.length > 0 && (
-          <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50/60 p-3">
-            <p className="text-sm font-semibold text-ink-800">Who would buy this? Pick a target:</p>
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              {targetSuggestions.map((target) => (
-                <button
-                  key={`${target.label}:${target.query}`}
-                  type="button"
-                  className="inline-flex items-center justify-center rounded-lg bg-white px-3 py-2 text-sm font-semibold text-orange-700 shadow-sm ring-1 ring-orange-200 transition-colors hover:bg-orange-100 disabled:opacity-50"
-                  disabled={prospectLoading || credits === 0 || (credits !== null && targetCount > credits)}
-                  onClick={() => {
-                    setCustomTarget(target.query);
-                    void handleFindProspects(target.query);
-                  }}
-                >
-                  {target.label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <input
-                className="input-field h-10 text-sm"
-                placeholder="Or type a target industry, e.g. dental clinics"
-                value={customTarget}
-                onChange={(e) => setCustomTarget(e.target.value)}
-              />
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
-                onClick={() => void handleFindProspects()}
-                disabled={prospectLoading || !customTarget.trim() || credits === 0 || (credits !== null && targetCount > credits)}
-              >
-                Search Target
-              </button>
-            </div>
-          </div>
-        )}
         <div className="mt-4">
           <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
-          <EmailCountStepper
-            value={targetCount}
-            onChange={setTargetCount}
-            maxCredits={credits}
-            disabled={prospectLoading}
-          />
+          <EmailCountStepper value={targetCount} onChange={setTargetCount} maxCredits={credits} disabled={prospectLoading} />
         </div>
         <button
+          type="button"
           className="mt-3 inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
           onClick={() => void handleFindProspects()}
-          disabled={prospectLoading || !customTarget.trim() || credits === 0 || (credits !== null && targetCount > credits)}
+          disabled={prospectLoading || !query.trim() || !!queryInputError || credits === 0 || (credits !== null && targetCount > credits)}
         >
           <Search className="w-4 h-4 mr-1.5" />
           Find {targetCount} Prospects & Emails
