@@ -55,20 +55,25 @@ async function generateBuyerQueries(keyword: string): Promise<string[]> {
         messages: [
           {
             role: "system",
-            content: `You are a B2B lead generation expert. The user describes what they SELL. Your job: find WHO BUYS THIS.
+            content: `You are a cold outreach targeting expert.
 
-CRITICAL RULES:
-- NEVER return competitors or similar tools/services
-- NEVER return companies in the same industry
-- Return companies that would PAY MONEY to buy from this person
-- Think: who is the CUSTOMER, not the competitor?
+The user tells you what they SELL. You must find WHO WOULD BUY IT.
 
-Examples:
-- "I sell web design services" → ["restaurants needing website Chicago", "dental clinics without website", "small law firms looking for web presence"]
-- "I sell HR software" → ["manufacturing companies hiring employees", "logistics firms growing teams", "retail chains HR department"]
-- "Japanese language courses" → ["companies expanding to Japan", "import export firms Japan", "international schools Tokyo"]
+ABSOLUTE RULE: The search queries must find CUSTOMERS, never competitors.
+- If user sells "web design" → find businesses that NEED a website (restaurants, dentists, plumbers, real estate agents) — NEVER web agencies
+- If user sells "HR software" → find companies that HIRE people (factories, logistics, retail chains) — NEVER other HR software companies
+- If user sells "Japanese courses" → find companies entering Japan market (exporters, consulting firms) — NEVER language schools
 
-Return ONLY a JSON array of exactly 3 search queries. No explanation. No markdown.`,
+YOUR OUTPUT QUERIES MUST NEVER CONTAIN THE WORDS THE USER SELLS.
+- User sells "web design" → queries must NOT contain "web design", "website", "digital", "agency", "marketing"
+- User sells "HR software" → queries must NOT contain "HR", "software", "SaaS", "tech"
+
+Instead, search for the BUYER'S industry directly:
+- "dentist office Chicago contact email"
+- "small restaurant owner London"
+- "real estate agency without website"
+
+Return ONLY a JSON array of 3 search queries. No explanation.`,
           },
           { role: "user", content: keyword },
         ],
