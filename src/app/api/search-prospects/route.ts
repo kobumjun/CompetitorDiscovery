@@ -26,7 +26,9 @@ const BLOCKED_HOSTS = [
 type SerperOrganicResult = { link?: string; title?: string; snippet?: string };
 type SerperResponse = { organic?: SerperOrganicResult[] };
 type ExtractedProspectRow = { email: string; source_url: string; company_name: string; host: string };
-type BuyerSearchPlan = { queries: string[]; competitor_keywords: string[] };
+type BuyerSearchPlan = { query: string; competitor_keywords: string[] };
+const MAX_CRAWL_URLS = 3;
+const SERPER_NUM_RESULTS = 20;
 
 function isBlockedHost(hostname: string) {
   return BLOCKED_HOSTS.some((b) => hostname === b || hostname.endsWith(`.${b}`));
@@ -44,7 +46,7 @@ function stripJsonFences(text: string) {
 }
 
 async function generateBuyerSearchPlan(keyword: string): Promise<BuyerSearchPlan> {
-  const empty: BuyerSearchPlan = { queries: [], competitor_keywords: [] };
+  const empty: BuyerSearchPlan = { query: "", competitor_keywords: [] };
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) return empty;
 
@@ -57,7 +59,7 @@ async function generateBuyerSearchPlan(keyword: string): Promise<BuyerSearchPlan
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 400,
+        max_tokens: 300,
         temperature: 0.7,
         response_format: { type: "json_object" },
         messages: [
@@ -65,22 +67,24 @@ async function generateBuyerSearchPlan(keyword: string): Promise<BuyerSearchPlan
             role: "system",
             content: `The user describes what they SELL. Do two things:
 
-1. Generate 3 Google search queries to find potential CUSTOMERS (businesses that would BUY this - not competitors)
-2. List keywords that would identify COMPETITORS in search results (companies selling the same thing)
+1. Write ONE Google search query to find potential CUSTOMERS
+   (businesses that would BUY from the user — NOT competitors)
+2. List keywords that identify COMPETITOR websites
 
-CUSTOMER = would pay money to buy from the user
-COMPETITOR = sells the same or similar product/service
+CUSTOMER = pays money to buy from the user
+COMPETITOR = sells the same thing
 
-Return ONLY this JSON (no explanation):
+Return ONLY this JSON:
 {
-  "queries": ["query1", "query2", "query3"],
-  "competitor_keywords": ["keyword1", "keyword2", "keyword3"]
+  "query": "single best search query",
+  "competitor_keywords": ["kw1", "kw2", "kw3", "kw4", "kw5"]
 }
 
 Examples:
-- User sells "fitness coaching" → queries find gyms/corporates needing wellness, competitor_keywords: ["fitness coach", "personal trainer", "fitness coaching", "training program"]
-- User sells "coffee machines" → queries find cafes/offices, competitor_keywords: ["coffee machine", "espresso machine", "coffee equipment"]
-- User sells "web design" → queries find restaurants/dentists/lawyers, competitor_keywords: ["web design", "web agency", "digital agency", "website builder"]`,
+- "fitness coaching" → query: "corporate wellness programs for employees", competitor_keywords: ["fitness coach", "personal trainer", "wellness coaching", "fitness coaching", "training program"]
+- "coffee machines" → query: "cafes and restaurants contact email", competitor_keywords: ["coffee machine", "espresso equipment", "coffee supplier"]
+- "web design services" → query: "small business owners needing website", competitor_keywords: ["web design", "web agency", "digital agency", "website builder", "web development"]
+- "HR software" → query: "manufacturing companies HR department contact", competitor_keywords: ["HR software", "HRIS", "human resources platform", "HR management"]`,
           },
           { role: "user", content: keyword },
         ],
@@ -93,25 +97,25 @@ Examples:
     if (!gptText) return empty;
 
     const parsed = JSON.parse(stripJsonFences(gptText)) as {
+      query?: unknown;
       queries?: unknown;
       competitor_keywords?: unknown;
     };
-    const queries = Array.isArray(parsed.queries)
-      ? parsed.queries
-          .filter((q): q is string => typeof q === "string" && q.trim().length > 0)
-          .map((q) => q.trim())
-          .slice(0, 3)
-      : [];
+    let queryStr = typeof parsed.query === "string" && parsed.query.trim() ? parsed.query.trim() : "";
+    if (!queryStr && Array.isArray(parsed.queries)) {
+      const first = parsed.queries.find((q): q is string => typeof q === "string" && q.trim().length > 0);
+      if (first) queryStr = first.trim();
+    }
     const competitor_keywords = Array.isArray(parsed.competitor_keywords)
       ? parsed.competitor_keywords
           .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
           .map((k) => k.trim())
       : [];
 
-    if (queries.length > 0) {
-      console.log("[GPT 변환 성공]", queries, "competitor_keywords:", competitor_keywords);
+    if (queryStr) {
+      console.log("[GPT 변환 성공]", queryStr, "competitor_keywords:", competitor_keywords);
     }
-    return { queries, competitor_keywords };
+    return { query: queryStr, competitor_keywords };
   } catch (err) {
     console.log("[GPT 변환 실패, 원래 키워드 사용]", err instanceof Error ? err.message : err);
     return empty;
@@ -147,17 +151,11 @@ function filterOrganicByCompetitorKeywords(
   const kws = competitorKeywords.map((k) => k.toLowerCase().trim()).filter(Boolean);
   if (kws.length === 0) return serperOrganic;
 
-  const before = serperOrganic.length;
   const filteredResults = serperOrganic.filter((result) => {
     const text = `${result.title ?? ""} ${result.snippet ?? ""} ${result.link ?? ""}`.toLowerCase();
-    const isCompetitor = kws.some((kw) => text.includes(kw.toLowerCase()));
-    if (isCompetitor) {
-      console.log(`[필터 제거] ${result.title ?? ""} - ${result.link ?? ""}`);
-    }
-    return !isCompetitor;
+    return !kws.some((kw) => text.includes(kw.toLowerCase()));
   });
 
-  console.log(`[키워드 필터] ${before}개 → ${filteredResults.length}개 유지`);
   return filteredResults.length > 0 ? filteredResults : serperOrganic;
 }
 
@@ -230,87 +228,42 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     const isTimedOut = () => Date.now() - startTime > OVERALL_TIMEOUT_MS;
 
-    // ── GPT: search queries + competitor keywords (single call, 2s timeout) ──
+    // ── GPT: single search query + competitor keywords (one call, 2s timeout) ──
     const buyerPlan = await generateBuyerSearchPlan(query.trim());
-    const buyerQueries = buyerPlan.queries;
     const competitorKeywords = buyerPlan.competitor_keywords;
-    const useBuyerQueries = buyerQueries.length >= 2;
-    console.log("[search-prospects] Buyer queries:", useBuyerQueries ? buyerQueries : "fallback to direct search");
+    const serperQuery = buyerPlan.query.trim() ? buyerPlan.query.trim() : buildSearchQuery(query);
+    console.log("[search-prospects] Serper query (1회):", serperQuery);
 
-    // ── Call Serper API ──
-    let candidates: string[];
+    // ── Serper: 1회만 ──
+    const serperRes = await fetch(SERPER_ENDPOINT, {
+      method: "POST",
+      headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ q: serperQuery, num: SERPER_NUM_RESULTS }),
+    });
 
-    if (useBuyerQueries) {
-      let queriesToRun: string[];
-      if (targetCount <= 2) {
-        queriesToRun = [buyerQueries[0]];
-      } else if (targetCount === 3) {
-        queriesToRun = buyerQueries.slice(0, 3);
-      } else {
-        queriesToRun = buyerQueries.slice(0, 3);
+    if (!serperRes.ok) {
+      const errorBody = await serperRes.text().catch(() => "");
+      console.error("[search-prospects] Serper error:", serperRes.status, errorBody.slice(0, 300));
+      if (serperRes.status === 429) {
+        throw new Error("Daily search limit reached. Try again tomorrow or contact support.");
       }
-
-      const perQueryNum = Math.min(30, Math.max(8, Math.ceil((targetCount * 4) / queriesToRun.length)));
-      console.log("[search-prospects] Running", queriesToRun.length, "Serper queries, num per query:", perQueryNum);
-
-      const allOrganic: SerperOrganicResult[] = [];
-      for (const sq of queriesToRun) {
-        if (isTimedOut()) break;
-        try {
-          const serperRes = await fetch(SERPER_ENDPOINT, {
-            method: "POST",
-            headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
-            body: JSON.stringify({ q: sq, num: perQueryNum }),
-          });
-          if (!serperRes.ok) {
-            const errorBody = await serperRes.text().catch(() => "");
-            console.warn("[search-prospects] Serper error for query:", sq, serperRes.status, errorBody.slice(0, 200));
-            if (serperRes.status === 429) {
-              throw new Error("Daily search limit reached. Try again tomorrow or contact support.");
-            }
-            continue;
-          }
-          const payload = (await serperRes.json()) as SerperResponse;
-          console.log("[search-prospects] Serper OK for:", sq, "results:", payload.organic?.length ?? 0);
-          allOrganic.push(...(payload.organic ?? []));
-        } catch (err) {
-          if (err instanceof Error && err.message.includes("Daily search limit")) throw err;
-          console.warn("[search-prospects] Serper call failed for query:", sq, err instanceof Error ? err.message : err);
-        }
-      }
-
-      let mergedOrganic = dedupeBlocklistOrganic(allOrganic);
-      mergedOrganic = filterOrganicByCompetitorKeywords(mergedOrganic, competitorKeywords);
-      candidates = mergedOrganic.map((r) => r.link ?? "").filter(Boolean);
-    } else {
-      const enhancedQuery = buildSearchQuery(query);
-      const serperNum = Math.min(100, targetCount * 4);
-      console.log("[search-prospects] Fallback Serper query:", enhancedQuery, "num:", serperNum);
-
-      const serperRes = await fetch(SERPER_ENDPOINT, {
-        method: "POST",
-        headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ q: enhancedQuery, num: serperNum }),
-      });
-
-      if (!serperRes.ok) {
-        const errorBody = await serperRes.text().catch(() => "");
-        console.error("[search-prospects] Serper error:", serperRes.status, errorBody.slice(0, 300));
-        if (serperRes.status === 429) {
-          throw new Error("Daily search limit reached. Try again tomorrow or contact support.");
-        }
-        throw new Error(`Serper API returned ${serperRes.status}: ${errorBody.slice(0, 100)}`);
-      }
-
-      const serperPayload = (await serperRes.json()) as SerperResponse;
-      console.log("[search-prospects] Serper OK — results:", serperPayload.organic?.length ?? 0);
-
-      let mergedOrganic = dedupeBlocklistOrganic(serperPayload.organic ?? []);
-      mergedOrganic = filterOrganicByCompetitorKeywords(mergedOrganic, competitorKeywords);
-      candidates = mergedOrganic.map((r) => r.link ?? "").filter(Boolean);
+      throw new Error(`Serper API returned ${serperRes.status}: ${errorBody.slice(0, 100)}`);
     }
 
-    console.log("[search-prospects] Candidates after blocklist filter:", candidates.length);
+    const serperPayload = (await serperRes.json()) as SerperResponse;
+    const serperOrganic = serperPayload.organic ?? [];
+    console.log("[search-prospects] Serper OK — organic:", serperOrganic.length);
+
+    let mergedOrganic = dedupeBlocklistOrganic(serperOrganic);
+    const afterDedupe = mergedOrganic.length;
+    mergedOrganic = filterOrganicByCompetitorKeywords(mergedOrganic, competitorKeywords);
+    const afterKw = mergedOrganic.length;
+    const toScrape = mergedOrganic.slice(0, MAX_CRAWL_URLS);
+    console.log(`[필터] ${afterDedupe}개 → ${afterKw}개 → 상위 ${MAX_CRAWL_URLS}개 크롤링`);
+
+    const candidates: string[] = toScrape.map((r) => r.link ?? "").filter(Boolean);
+
+    console.log("[search-prospects] Crawl URL count:", candidates.length);
 
     if (candidates.length === 0) {
       await refundCredits(user.id, reservedCredits);
