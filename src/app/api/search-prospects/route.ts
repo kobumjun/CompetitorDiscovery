@@ -9,7 +9,6 @@ const SERPER_ENDPOINT = "https://google.serper.dev/search";
 const URL_TIMEOUT_MS = 4000;
 const OVERALL_TIMEOUT_MS = 55_000;
 const CONCURRENCY = 5;
-const GPT_OPTIONAL_QUERY_TIMEOUT_MS = 4000;
 const SEARCH_EXTRACT_PATHS = ["", "/contact", "/about"];
 
 const BLOCKED_HOSTS = [
@@ -34,93 +33,6 @@ function isBlockedHost(hostname: string) {
   return BLOCKED_HOSTS.some((b) => hostname === b || hostname.endsWith(`.${b}`));
 }
 
-function getCleanedSellerPhrase(keyword: string): string {
-  let cleaned = keyword.replace(/^(i sell|i offer|i provide|we sell|we offer)\s+/i, "").trim();
-  if (!cleaned) cleaned = keyword.trim();
-  return cleaned;
-}
-
-function buildCompetitorKeywordsFromCleaned(cleaned: string): string[] {
-  return cleaned.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
-}
-
-async function maybeRefineSearchQueryWithGpt(cleaned: string, fallbackQuery: string): Promise<string> {
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) return fallbackQuery;
-
-  try {
-    const gptRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        max_tokens: 150,
-        temperature: 0.7,
-        messages: [
-          {
-            role: "system",
-            content: `The user describes what they SELL.
-Write ONE Google search query to find businesses that would BUY this.
-
-ABSOLUTE RULE: Your search query must NOT contain ANY word from what the user sells.
-Instead, search for the BUYER'S industry directly.
-
-Think step by step:
-1. What type of business would pay money for this?
-2. Search for THAT type of business by their industry name.
-
-Examples:
-- User sells "fitness coaching" → Buyers: corporations with employees, HR departments
-  → Query: "corporate offices employee wellness program contact email"
-  (NO "fitness", NO "coaching", NO "training" in the query)
-
-- User sells "web design services" → Buyers: small businesses without good websites
-  → Query: "small restaurant owner contact email"
-  (NO "web", NO "design", NO "agency" in the query)
-
-- User sells "coffee machines" → Buyers: cafes, restaurants, offices
-  → Query: "new cafe opening contact email"
-  (NO "coffee", NO "machine" in the query)
-
-- User sells "accounting services" → Buyers: small business owners
-  → Query: "small business owner freelancer contact"
-  (NO "accounting", NO "bookkeeping" in the query)
-
-- User sells "dental equipment" → Buyers: dental clinics
-  → Query: "dental clinic private practice contact email"
-  (NO "equipment", NO "supplier" in the query. "dental" is OK because dental clinics ARE the buyer)
-
-- User sells "HR software" → Buyers: growing companies that hire people
-  → Query: "manufacturing company hiring employees contact"
-  (NO "HR", NO "software" in the query)
-
-IMPORTANT: Your query must target a SPECIFIC type of business (e.g., "dental clinics", "law firms", "restaurants", "real estate agencies").
-Never search for generic terms like "small business" or "companies". Be specific about the buyer's industry.
-If the user doesn't specify a target, pick the most likely buyer industry.
-
-Return ONLY the search query string. Nothing else. No quotes. No explanation.`,
-          },
-          { role: "user", content: cleaned },
-        ],
-      }),
-      signal: AbortSignal.timeout(GPT_OPTIONAL_QUERY_TIMEOUT_MS),
-    });
-    const gptData = await gptRes.json();
-    let gptQuery: string = gptData.choices?.[0]?.message?.content?.trim() ?? "";
-    gptQuery = gptQuery.replace(/^["']|["']$/g, "").replace(/```[\s\S]*?```/g, "").trim();
-    if (gptQuery && gptQuery.length > 5 && gptQuery.length < 200) {
-      console.log(`[GPT 성공] "${gptQuery}"`);
-      return gptQuery;
-    }
-  } catch (err) {
-    console.log(`[GPT 타임아웃, fallback 사용] "${fallbackQuery}"`, err instanceof Error ? err.message : "");
-  }
-  return fallbackQuery;
-}
-
 function normalizedSerperLink(link: string): string | null {
   const trimmed = link.trim();
   if (!trimmed) return null;
@@ -141,19 +53,6 @@ function dedupeBlocklistOrganic(organic: SerperOrganicResult[]): SerperOrganicRe
     out.push({ ...r, link: key });
   }
   return out;
-}
-
-function filterSerperOrganicByCompetitorKeywords(
-  organic: SerperOrganicResult[],
-  competitorKeywords: string[]
-): SerperOrganicResult[] {
-  const kws = competitorKeywords.map((w) => w.toLowerCase()).filter(Boolean);
-  if (kws.length === 0) return organic;
-
-  return organic.filter((result) => {
-    const titleAndLink = `${result.title ?? ""} ${result.link ?? ""}`.toLowerCase();
-    return !kws.some((w) => titleAndLink.includes(w));
-  });
 }
 
 async function runWithConcurrency<TInput, TOutput>(
@@ -225,14 +124,9 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     const isTimedOut = () => Date.now() - startTime > OVERALL_TIMEOUT_MS;
 
-    // ── cleaned → GPT Serper 쿼리(최대 4초) → 경쟁사 키워드(Serper 전) ──
-    const cleaned = getCleanedSellerPhrase(query.trim());
-    const fallbackSerperQuery = `businesses that need ${cleaned} contact email`;
-    const serperQuery = await maybeRefineSearchQueryWithGpt(cleaned, fallbackSerperQuery);
-    const competitorKeywords = buildCompetitorKeywordsFromCleaned(cleaned);
-    console.log(
-      `[쿼리 변환] "${query.trim()}" → Serper: "${serperQuery}" / 경쟁사 키워드(title+link): ${competitorKeywords.join(", ") || "(없음)"}`
-    );
+    // Query is already the target buyer industry selected by the user.
+    const serperQuery = `${query.trim()} contact email`;
+    console.log("[search-prospects] Serper query (target):", serperQuery);
 
     // ── Serper: 1회만 ──
     const serperRes = await fetch(SERPER_ENDPOINT, {
@@ -255,12 +149,8 @@ export async function POST(request: NextRequest) {
     console.log("[search-prospects] Serper OK — organic:", serperOrganic.length);
 
     const mergedOrganic = dedupeBlocklistOrganic(serperOrganic);
-    const filteredOrganic = filterSerperOrganicByCompetitorKeywords(mergedOrganic, competitorKeywords);
-    const toScrape =
-      filteredOrganic.length > 0
-        ? filteredOrganic.slice(0, MAX_CRAWL_URLS)
-        : mergedOrganic.slice(0, MAX_CRAWL_URLS);
-    console.log(`[필터] ${serperOrganic.length}개 → ${filteredOrganic.length}개 → ${toScrape.length}개 크롤링`);
+    const toScrape = mergedOrganic.slice(0, MAX_CRAWL_URLS);
+    console.log(`[search-prospects] ${serperOrganic.length}개 → ${mergedOrganic.length}개 → ${toScrape.length}개 크롤링`);
 
     const candidates: string[] = toScrape.map((r) => r.link ?? "").filter(Boolean);
 

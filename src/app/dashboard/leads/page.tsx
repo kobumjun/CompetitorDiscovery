@@ -73,6 +73,11 @@ type SmartProspectResponse = {
   message?: string;
 };
 
+type TargetSuggestion = {
+  label: string;
+  query: string;
+};
+
 type RowComposerState = {
   open: boolean;
   outreachType: OutreachType;
@@ -124,6 +129,10 @@ export default function LeadsPage() {
   const [bulkResult, setBulkResult] = useState<BulkResponse | null>(null);
   const [openUrlInput, setOpenUrlInput] = useState(false);
   const [keyword, setKeyword] = useState("");
+  const [targetSuggestions, setTargetSuggestions] = useState<TargetSuggestion[]>([]);
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [targetError, setTargetError] = useState<string | null>(null);
+  const [customTarget, setCustomTarget] = useState("");
   const [targetCount, setTargetCount] = useState(3);
   const [smartLoading, setSmartLoading] = useState(false);
   const [smartProgress, setSmartProgress] = useState<string | null>(null);
@@ -230,8 +239,37 @@ export default function LeadsPage() {
     }
   }
 
-  async function handleSmartSearch() {
-    if (!keyword.trim()) return;
+  async function suggestTargetsFor(rawKeyword = keyword) {
+    const value = rawKeyword.trim();
+    const hasInvalidInput = value.includes("@") || /https?:\/\/|www\.|\.com\b|\.io\b|\.org\b|\.net\b/i.test(value);
+    if (!value || hasInvalidInput) return;
+    setKeyword(value);
+    setTargetLoading(true);
+    setTargetError(null);
+    setTargetSuggestions([]);
+    setCustomTarget("");
+    try {
+      const response = await fetch("/api/suggest-targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: value }),
+      });
+      const payload = (await response.json()) as TargetSuggestion[] | { targets?: TargetSuggestion[]; error?: string };
+      if (!response.ok) {
+        setTargetError(!Array.isArray(payload) ? payload.error || "Could not suggest targets. Try typing one below." : "Could not suggest targets. Try typing one below.");
+        return;
+      }
+      setTargetSuggestions(Array.isArray(payload) ? payload : payload.targets ?? []);
+    } catch {
+      setTargetError("Could not suggest targets. Try typing one below.");
+    } finally {
+      setTargetLoading(false);
+    }
+  }
+
+  async function handleSmartSearch(targetOverride?: string) {
+    const selectedTarget = (targetOverride ?? customTarget).trim();
+    if (!selectedTarget) return;
     setSmartLoading(true);
     setSmartError(null);
     setSmartProgress("Searching for prospects...");
@@ -249,7 +287,7 @@ export default function LeadsPage() {
       const response = await fetch("/api/search-prospects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: keyword.trim(), requestedCount: targetCount }),
+        body: JSON.stringify({ query: selectedTarget, requestedCount: targetCount }),
       });
       const payload = (await response.json()) as SmartProspectResponse & { error?: string };
       if (!response.ok) {
@@ -446,26 +484,76 @@ export default function LeadsPage() {
 
       <div className="card p-4 mb-6">
         <label className="text-sm font-medium text-ink-700 mb-2 block">
-          What kind of businesses do you want to reach?
+          What do you sell?
         </label>
         <button
           type="button"
           className="mb-2 flex items-center gap-1.5 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-left transition-colors hover:bg-orange-100"
-          onClick={() => setKeyword("I sell web design services")}
+          disabled={targetLoading || smartLoading}
+          onClick={() => void suggestTargetsFor("coffee machines")}
         >
           <span className="text-base leading-none">💡</span>
           <span className="text-xs sm:text-sm text-orange-700 italic">
-            Try: &quot;I sell web design services&quot; or &quot;I sell HR software for startups&quot;
+            Try: &quot;coffee machines&quot; or &quot;web design&quot;
           </span>
         </button>
         <input
           className={cn("input-field h-12", keywordInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
-          placeholder="Describe what you sell, e.g. 'Japanese language courses' or 'web design services in London'"
+          placeholder="e.g. coffee machines, web design, accounting services"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void suggestTargetsFor();
+          }}
         />
         {keywordInputError && (
           <p className="mt-1.5 text-sm text-red-600">{keywordInputError}</p>
+        )}
+        <button
+          type="button"
+          className="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-4 py-2.5 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-50 sm:w-auto"
+          onClick={() => void suggestTargetsFor()}
+          disabled={targetLoading || smartLoading || !keyword.trim() || !!keywordInputError}
+        >
+          {targetLoading ? "Finding targets..." : "Find Targets"}
+        </button>
+        {targetError && <p className="mt-2 text-sm text-red-600">{targetError}</p>}
+        {targetSuggestions.length > 0 && (
+          <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50/60 p-3">
+            <p className="text-sm font-semibold text-ink-800">Who would buy this? Pick a target:</p>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {targetSuggestions.map((target) => (
+                <button
+                  key={`${target.label}:${target.query}`}
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-lg bg-white px-3 py-2 text-sm font-semibold text-orange-700 shadow-sm ring-1 ring-orange-200 transition-colors hover:bg-orange-100 disabled:opacity-50"
+                  disabled={smartLoading || credits === 0 || (credits !== null && targetCount > credits)}
+                  onClick={() => {
+                    setCustomTarget(target.query);
+                    void handleSmartSearch(target.query);
+                  }}
+                >
+                  {target.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                className="input-field h-10 text-sm"
+                placeholder="Or type a target industry, e.g. dental clinics"
+                value={customTarget}
+                onChange={(e) => setCustomTarget(e.target.value)}
+              />
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
+                onClick={() => void handleSmartSearch()}
+                disabled={smartLoading || !customTarget.trim() || credits === 0 || (credits !== null && targetCount > credits)}
+              >
+                Search Target
+              </button>
+            </div>
+          </div>
         )}
         <div className="mt-4">
           <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
@@ -477,8 +565,8 @@ export default function LeadsPage() {
           />
         </div>
         <button
-          onClick={handleSmartSearch}
-          disabled={smartLoading || !keyword.trim() || !!keywordInputError || credits === 0 || (credits !== null && targetCount > credits)}
+          onClick={() => void handleSmartSearch()}
+          disabled={smartLoading || !customTarget.trim() || credits === 0 || (credits !== null && targetCount > credits)}
           className="mt-3 inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
         >
           <Search className="w-4 h-4 mr-1.5" />
