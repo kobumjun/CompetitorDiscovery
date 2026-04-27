@@ -8,7 +8,9 @@ export const maxDuration = 60;
 const SERPER_ENDPOINT = "https://google.serper.dev/search";
 const URL_TIMEOUT_MS = 4000;
 const OVERALL_TIMEOUT_MS = 55_000;
-const CONCURRENCY = 5;
+const BATCH_SIZE = 3;
+const MAX_CRAWL_MS = 7000;
+const MAX_SERPER_URLS = 20;
 const SEARCH_EXTRACT_PATHS = ["", "/contact", "/about"];
 
 const BLOCKED_HOSTS = [
@@ -26,7 +28,6 @@ const BLOCKED_HOSTS = [
 type SerperOrganicResult = { link?: string; title?: string; snippet?: string };
 type SerperResponse = { organic?: SerperOrganicResult[] };
 type ExtractedProspectRow = { email: string; source_url: string; company_name: string; host: string };
-const MAX_CRAWL_URLS = 3;
 const SERPER_NUM_RESULTS = 10;
 const GPT_TIMEOUT_MS = 4000;
 
@@ -81,6 +82,14 @@ function stripLineNoise(line: string) {
     .replace(/^\d+[.)]\s*/, "")
     .replace(/^["'`]+|["'`]+$/g, "")
     .trim();
+}
+
+function hostOfLink(link: string | undefined): string | null {
+  if (!link?.trim()) return null;
+  const key = normalizedSerperLink(link);
+  if (!key) return null;
+  const host = normalizeUrl(key)?.hostname.replace(/^www\./, "").toLowerCase();
+  return host || null;
 }
 
 async function buildSerperQueriesFromGpt(userSellDescription: string, cleaned: string): Promise<string[]> {
@@ -165,25 +174,106 @@ function dedupeBlocklistOrganic(organic: SerperOrganicResult[]): SerperOrganicRe
   return out;
 }
 
-async function runWithConcurrency<TInput, TOutput>(
-  items: TInput[],
-  worker: (item: TInput) => Promise<TOutput>,
-  concurrency: number
-): Promise<PromiseSettledResult<TOutput>[]> {
-  const results: PromiseSettledResult<TOutput>[] = new Array(items.length);
-  let cursor = 0;
-  async function runner() {
-    while (cursor < items.length) {
-      const idx = cursor++;
-      try {
-        results[idx] = { status: "fulfilled", value: await worker(items[idx]) };
-      } catch (error) {
-        results[idx] = { status: "rejected", reason: error };
+function deprioritizeKnownHostSerpItems(organic: SerperOrganicResult[], knownHostnames: Set<string>): SerperOrganicResult[] {
+  if (knownHostnames.size === 0) return organic;
+  const a: SerperOrganicResult[] = [];
+  const b: SerperOrganicResult[] = [];
+  for (const it of organic) {
+    const h = hostOfLink(it.link);
+    if (h && knownHostnames.has(h)) b.push(it);
+    else a.push(it);
+  }
+  return [...a, ...b];
+}
+
+async function loadExistingEmailContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<{ existingEmails: Set<string>; knownHostnames: Set<string> }> {
+  const existingEmails = new Set<string>();
+  const knownHostnames = new Set<string>();
+  try {
+    const { data: rows, error } = await supabase
+      .from("extracted_leads")
+      .select("emails, source_url")
+      .eq("user_id", userId)
+      .limit(3000);
+    if (error) throw error;
+    for (const row of rows ?? []) {
+      if (row.source_url && typeof row.source_url === "string") {
+        const h = hostOfLink(row.source_url);
+        if (h) knownHostnames.add(h);
+      }
+      const raw = (row as { emails?: unknown }).emails;
+      if (!raw || !Array.isArray(raw)) continue;
+      for (const e of raw) {
+        if (e && typeof e === "object" && "email" in e) {
+          const em = (e as { email?: string }).email;
+          if (typeof em === "string" && em.includes("@")) {
+            const lower = em.toLowerCase();
+            existingEmails.add(lower);
+            const at = lower.lastIndexOf("@");
+            if (at > 0) {
+              const dom = lower.slice(at + 1).replace(/^www\./, "");
+              if (dom) knownHostnames.add(dom);
+            }
+          }
+        }
       }
     }
+    console.log(`[중복 체크] 기존 이메일 ${existingEmails.size}개, 알려진 호스트/도메인 ${knownHostnames.size}개 로드`);
+  } catch (err) {
+    console.log(
+      "[중복 체크 실패, 무시하고 진행]",
+      err instanceof Error ? err.message : String(err)
+    );
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => runner()));
-  return results;
+  return { existingEmails, knownHostnames };
+}
+
+type OkExtraction = {
+  ok: true;
+  emails: string[];
+  sourceForEmail: Map<string, string>;
+  baseUrl: string;
+  host: string;
+};
+
+function rowFromExtraction(extraction: OkExtraction, email: string): ExtractedProspectRow {
+  const el = email.toLowerCase();
+  return {
+    email,
+    source_url: extraction.sourceForEmail.get(el) ?? extraction.baseUrl,
+    company_name: deriveCompanyNameFromHost(extraction.host),
+    host: extraction.host,
+  };
+}
+
+async function tryExtractFromUrl(
+  url: string,
+  emailSeen: Set<string>
+): Promise<{ newRows: ExtractedProspectRow[]; dupRows: ExtractedProspectRow[] }> {
+  const extraction = await extractWebsiteEmails(url, {
+    timeoutMs: URL_TIMEOUT_MS,
+    paths: SEARCH_EXTRACT_PATHS,
+  });
+  if (!extraction.ok || extraction.emails.length === 0) return { newRows: [], dupRows: [] };
+  const ok = extraction as OkExtraction;
+  const newRows: ExtractedProspectRow[] = [];
+  const dupRows: ExtractedProspectRow[] = [];
+  const pageSeen = new Set<string>();
+  for (const email of ok.emails) {
+    const el = email.toLowerCase();
+    if (!el.includes("@")) continue;
+    const row = rowFromExtraction(ok, email);
+    if (emailSeen.has(el) || pageSeen.has(el)) {
+      dupRows.push(row);
+    } else {
+      pageSeen.add(el);
+      newRows.push(row);
+    }
+  }
+  return { newRows, dupRows };
 }
 
 export async function POST(request: NextRequest) {
@@ -238,7 +328,11 @@ export async function POST(request: NextRequest) {
     const cleaned = stripSellPrefixes(keyword) || keyword;
     const queries = await buildSerperQueriesFromGpt(keyword, cleaned);
 
-    // ── Serper: queries.length회 병렬 ──
+    const { existingEmails, knownHostnames: dbKnownHosts } = await loadExistingEmailContext(supabase, user.id);
+    // Session-level tracking (clone so we can mutate for same-run dedupe)
+    const emailSeen = new Set<string>(existingEmails);
+
+    // ── Serper: parallel (num=10 each) ──
     const serperPromises = queries.map((q) =>
       fetch(SERPER_ENDPOINT, {
         method: "POST",
@@ -249,36 +343,34 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({ q, num: SERPER_NUM_RESULTS }),
         signal: AbortSignal.timeout(3000),
       })
-        .then(async (r) => {
-          if (!r.ok) {
-            const errorBody = await r.text().catch(() => "");
-            console.error("[search-prospects] Serper error:", r.status, errorBody.slice(0, 200));
-            if (r.status === 429) {
-              throw new Error("Daily search limit reached. Try again tomorrow or contact support.");
-            }
-            return { organic: [] } as SerperResponse;
-          }
-          return (await r.json()) as SerperResponse;
-        })
-        .catch((err) => {
-          if (err instanceof Error && err.message.includes("Daily search limit")) throw err;
-          return { organic: [] } as SerperResponse;
-        })
+        .then(async (r) => (r.ok ? (await r.json().catch(() => ({})) as SerperResponse) : ({} as SerperResponse)))
+        .catch(() => ({} as SerperResponse))
     );
 
     const serperResults = await Promise.all(serperPromises);
 
     const allOrganic: SerperOrganicResult[] = [];
-    const seenLinks = new Set<string>();
+    const seenDomain = new Set<string>();
     for (const result of serperResults) {
-      for (const item of result.organic ?? []) {
-        const link = item.link;
-        if (!link || seenLinks.has(link)) continue;
-        seenLinks.add(link);
+      for (const item of result.organic || []) {
+        if (!item.link) continue;
+        let domain: string;
+        try {
+          const u = new URL(
+            /^(https?:)?\/\//i.test(String(item.link)) ? String(item.link) : `https://${item.link}`
+          );
+          domain = u.hostname.replace(/^www\./, "").toLowerCase();
+        } catch {
+          continue;
+        }
+        if (seenDomain.has(domain)) continue;
+        seenDomain.add(domain);
         allOrganic.push(item);
+        if (allOrganic.length >= MAX_SERPER_URLS) break;
       }
+      if (allOrganic.length >= MAX_SERPER_URLS) break;
     }
-    console.log(`[Serper] 쿼리 ${queries.length}개 → 합산 ${allOrganic.length}개`);
+    console.log(`[Serper] 쿼리 ${queries.length}개 → 합산 ${allOrganic.length}개 (도메인 중복 제거)`);
 
     const competitorKeywords = cleaned
       .toLowerCase()
@@ -290,86 +382,99 @@ export async function POST(request: NextRequest) {
       return !competitorKeywords.some((w) => titleAndLink.includes(w));
     });
 
-    const toScrapeOrganic =
-      filtered.length > 0 ? filtered.slice(0, targetCount) : allOrganic.slice(0, targetCount);
+    const candidates = filtered.length > 0 ? filtered : allOrganic;
+    console.log(`[필터] ${allOrganic.length}개 → ${filtered.length}개`);
 
-    console.log(`[필터] ${allOrganic.length}개 → ${filtered.length}개 → 크롤링 ${toScrapeOrganic.length}개`);
+    const blocklisted = dedupeBlocklistOrganic(candidates);
+    const ordered = deprioritizeKnownHostSerpItems(blocklisted, dbKnownHosts);
+    const candidateUrls: string[] = [];
+    for (const it of ordered) {
+      const link = it.link;
+      if (!link) continue;
+      const n = normalizedSerperLink(link);
+      if (n) candidateUrls.push(n);
+    }
 
-    const mergedOrganic = dedupeBlocklistOrganic(toScrapeOrganic);
-    const toScrape = mergedOrganic.slice(0, Math.min(MAX_CRAWL_URLS, targetCount, mergedOrganic.length));
-    console.log(
-      `[search-prospects] deduped/blocklist ${mergedOrganic.length}개 → 실제 크롤 ${toScrape.length}개`
-    );
+    console.log("[search-prospects] Crawl candidate URL count:", candidateUrls.length);
 
-    const candidates: string[] = toScrape.map((r) => r.link ?? "").filter(Boolean);
-
-    console.log("[search-prospects] Crawl URL count:", candidates.length);
-
-    if (candidates.length === 0) {
+    if (candidateUrls.length === 0) {
       await refundCredits(user.id, reservedCredits);
       return NextResponse.json({ error: "No companies found. Try broader keywords." }, { status: 404 });
     }
 
-    // ── Crawl & extract (deduplicate by email address only) ──
-    const seenEmails = new Set<string>();
+    // ── Batch crawl: fill new emails up to targetCount (7s crawl window) ──
+    const crawlStart = Date.now();
+    const newResultRows: ExtractedProspectRow[] = [];
+    const dupResultRows: ExtractedProspectRow[] = [];
     const failures: { url: string; reason: string }[] = [];
-    let uniqueRows: ExtractedProspectRow[] = [];
-    let processedCount = 0;
-    let cursor = 0;
+    let candidateIndex = 0;
+    let batchN = 0;
 
-    while (cursor < candidates.length && uniqueRows.length < targetCount && !isTimedOut()) {
-      const batch = candidates.slice(cursor, cursor + CONCURRENCY);
-      cursor += batch.length;
-      processedCount += batch.length;
+    while (
+      newResultRows.length < targetCount &&
+      candidateIndex < candidateUrls.length &&
+      Date.now() - crawlStart < MAX_CRAWL_MS &&
+      !isTimedOut()
+    ) {
+      const batch = candidateUrls.slice(candidateIndex, candidateIndex + BATCH_SIZE);
+      candidateIndex += batch.length;
+      batchN += 1;
+      if (batch.length === 0) break;
 
-      const results = await runWithConcurrency(batch, async (url) => {
-        if (isTimedOut()) throw new Error("Timeout");
-        const extraction = await extractWebsiteEmails(url, {
-          timeoutMs: URL_TIMEOUT_MS,
-          paths: SEARCH_EXTRACT_PATHS,
-        });
-        if (!extraction.ok) throw new Error(extraction.message || "No emails found");
-        if (extraction.emails.length === 0) throw new Error("No emails found");
+      for (const url of batch) {
+        if (newResultRows.length >= targetCount) break;
+        if (Date.now() - crawlStart >= MAX_CRAWL_MS || isTimedOut()) break;
 
-        const selected = extraction.emails.find((e) => {
-          const lower = e.toLowerCase();
-          return !seenEmails.has(lower);
-        });
-        if (!selected) throw new Error("Only duplicate emails found");
-
-        return {
-          email: selected,
-          source_url: extraction.sourceForEmail.get(selected.toLowerCase()) ?? extraction.baseUrl,
-          company_name: deriveCompanyNameFromHost(extraction.host),
-          host: extraction.host,
-        };
-      }, CONCURRENCY);
-
-      results.forEach((result, i) => {
-        const url = batch[i];
-        if (result.status !== "fulfilled") {
-          failures.push({ url, reason: result.reason instanceof Error ? result.reason.message : "Unknown error" });
-          return;
+        let newRows: ExtractedProspectRow[] = [];
+        let dupRows: ExtractedProspectRow[] = [];
+        try {
+          const r = await tryExtractFromUrl(url, emailSeen);
+          newRows = r.newRows;
+          dupRows = r.dupRows;
+        } catch {
+          failures.push({ url, reason: "Crawl failed" });
+          continue;
         }
-        if (uniqueRows.length >= targetCount) return;
-        const row = result.value;
-        const emailLower = row.email.toLowerCase();
-        if (seenEmails.has(emailLower)) {
-          failures.push({ url, reason: "Duplicate email" });
-          return;
+        if (newRows.length === 0 && dupRows.length === 0) {
+          failures.push({ url, reason: "No email found" });
         }
-        seenEmails.add(emailLower);
-        uniqueRows.push(row);
-      });
+        for (const r of dupRows) {
+          dupResultRows.push(r);
+        }
+        for (const r of newRows) {
+          if (newResultRows.length >= targetCount) break;
+          const el = r.email.toLowerCase();
+          if (emailSeen.has(el)) {
+            dupResultRows.push(r);
+            continue;
+          }
+          emailSeen.add(el);
+          newResultRows.push(r);
+        }
+      }
+      console.log(
+        `[배치 ${batchN}] 새: ${newResultRows.length}/${targetCount}, 중복: ${dupResultRows.length}, index: ${candidateIndex}/${candidateUrls.length}`
+      );
     }
 
-    console.log("[search-prospects] Crawl done — found:", uniqueRows.length, "failed:", failures.length, "elapsed:", Date.now() - startTime, "ms");
+    const duplicatesSkipped = dupResultRows.length;
+    const crawlElapsed = Date.now() - crawlStart;
+    console.log(
+      "[search-prospects] Crawl done — new:",
+      newResultRows.length,
+      "dups:",
+      dupResultRows.length,
+      "failures:",
+      failures.length,
+      "crawl ms:",
+      crawlElapsed,
+    );
 
-    // ── Persist results ──
+    // ── Persist NEW rows only (each success → credit used) ──
     const service = await createServiceClient();
     const leads: Array<{ email: string; source_url: string; company_name: string; lead_id: string; client_id: string }> = [];
 
-    for (const row of uniqueRows) {
+    for (const row of newResultRows) {
       if (isTimedOut()) break;
       try {
         const { data: lead } = await service
@@ -378,7 +483,9 @@ export async function POST(request: NextRequest) {
             user_id: user.id,
             source_url: row.source_url,
             company_name: row.company_name,
-            emails: [{ email: row.email, source: row.source_url, confidence: row.email.startsWith("info@") || row.email.startsWith("hello@") ? "medium" : "high" }],
+            emails: [
+              { email: row.email, source: row.source_url, confidence: row.email.startsWith("info@") || row.email.startsWith("hello@") ? "medium" : "high" },
+            ],
             search_keyword: keyword,
           })
           .select("id")
@@ -387,7 +494,14 @@ export async function POST(request: NextRequest) {
 
         const { data: client } = await service
           .from("clients")
-          .insert({ user_id: user.id, email: row.email, company_name: row.company_name, website: `https://${row.host}`, source_url: row.source_url, status: "new" })
+          .insert({
+            user_id: user.id,
+            email: row.email,
+            company_name: row.company_name,
+            website: `https://${row.host}`,
+            source_url: row.source_url,
+            status: "new",
+          })
           .select("id")
           .single();
         if (!client) continue;
@@ -398,20 +512,59 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Refund unused credits ──
     const creditsUsed = leads.length;
     const creditsRefunded = Math.max(reservedCredits - creditsUsed, 0);
     if (creditsRefunded > 0) await refundCredits(user.id, creditsRefunded);
     const finalCredits = reserve.remaining + creditsRefunded;
+
+    console.log(
+      `[크레딧] 선차감: ${reservedCredits}, 사용(저장): ${creditsUsed}, 환불: ${creditsRefunded}, duplicatesSkipped(미저장): ${duplicatesSkipped}`
+    );
+
+    const stats = {
+      newEmails: creditsUsed,
+      duplicatesSkipped,
+      websitesCrawled: Math.min(candidateIndex, candidateUrls.length),
+      candidateUrlsTotal: candidateUrls.length,
+      creditsUsed,
+      creditsRefunded,
+    };
+
+    const dupPart =
+      stats.duplicatesSkipped > 0
+        ? ` (${stats.duplicatesSkipped} duplicate${stats.duplicatesSkipped === 1 ? "" : "s"} skipped)`
+        : "";
+    const refundWord = stats.creditsRefunded === 1 ? "credit" : "credits";
+    const usedWord = stats.creditsUsed === 1 ? "credit" : "credits";
+
+    let message: string;
+    if (stats.creditsUsed > 0) {
+      message =
+        stats.creditsRefunded > 0
+          ? `✓ Found ${stats.creditsUsed} new email${stats.creditsUsed === 1 ? "" : "s"}${dupPart} — ${stats.creditsUsed} ${usedWord} used, ${stats.creditsRefunded} ${refundWord} refunded`
+          : `✓ Found ${stats.creditsUsed} new email${stats.creditsUsed === 1 ? "" : "s"}${dupPart} — ${stats.creditsUsed} ${usedWord} used`;
+    } else if (stats.duplicatesSkipped > 0) {
+      const credWord = reservedCredits === 1 ? "credit" : "credits";
+      message = `No new emails found${dupPart} — all ${reservedCredits} ${credWord} refunded.`;
+    } else {
+      message = `No emails found — all ${reservedCredits} credits refunded. Try different keywords.`;
+    }
 
     console.log("[search-prospects] === DONE === used:", creditsUsed, "refunded:", creditsRefunded, "elapsed:", Date.now() - startTime, "ms");
 
     return NextResponse.json({
       success: true,
       leads,
+      stats,
+      duplicateLeads: dupResultRows.map((r) => ({
+        email: r.email,
+        company_name: r.company_name,
+        source_url: r.source_url,
+        duplicate: true,
+      })),
       requestedCount: targetCount,
-      searchedCount: candidates.length,
-      processedCount,
+      searchedCount: candidateUrls.length,
+      processedCount: candidateIndex,
       successfulUrls: leads.length,
       failedUrls: failures.length,
       failed: failures,
@@ -419,18 +572,12 @@ export async function POST(request: NextRequest) {
       creditsUsed,
       creditsRefunded,
       creditsRemaining: finalCredits,
-      message:
-        creditsUsed === 0
-          ? `No emails found — all ${reservedCredits} credits refunded. Try different keywords.`
-          : creditsRefunded > 0
-            ? `✓ Found ${creditsUsed} of ${reservedCredits} emails — ${creditsUsed} credits used, ${creditsRefunded} credits refunded`
-            : `✓ Found ${creditsUsed} emails — ${creditsUsed} credits used`,
+      message,
     });
   } catch (error) {
     if (reservedCredits > 0 && userId) await refundCredits(userId, reservedCredits).catch(() => undefined);
     console.error("[search-prospects] === FATAL ===", error instanceof Error ? error.message : String(error));
-    const message = error instanceof Error ? error.message : "An unexpected error occurred.";
-    const status = message.includes("Daily search limit") ? 429 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const errMsg = error instanceof Error ? error.message : "An unexpected error occurred.";
+    return NextResponse.json({ error: errMsg }, { status: 500 });
   }
 }

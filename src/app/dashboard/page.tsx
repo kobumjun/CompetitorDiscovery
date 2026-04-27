@@ -48,6 +48,15 @@ type BulkPayload = {
   leads: ProspectLead[];
   failed?: { url: string; reason: string }[];
   message?: string;
+  stats?: {
+    newEmails: number;
+    duplicatesSkipped: number;
+    websitesCrawled: number;
+    candidateUrlsTotal: number;
+    creditsUsed: number;
+    creditsRefunded: number;
+  };
+  duplicateLeads?: { email: string; company_name: string; source_url: string; duplicate?: boolean }[];
 };
 
 type RowComposerState = {
@@ -217,10 +226,15 @@ export default function DashboardPage() {
       setProspectResult(payload);
       setProcessingCounter(payload.leads.length);
       setProgress(payload.message || "Done!");
-      if (payload.leads.length === 0) {
+      if (
+        payload.leads.length === 0 &&
+        !(payload.stats && payload.stats.duplicatesSkipped > 0)
+      ) {
         setProspectError(
           `No emails found — all ${payload.creditsReserved} credits refunded. Try different keywords.`
         );
+      } else {
+        setProspectError(null);
       }
       if (typeof payload.creditsRemaining === "number") {
         setCredits(payload.creditsRemaining);
@@ -398,11 +412,13 @@ export default function DashboardPage() {
         <section className="card p-4 mb-8">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-emerald-700 font-medium">
-              {prospectResult.creditsUsed === 0
-                ? `No emails found — all ${prospectResult.creditsReserved} credits refunded. Try different keywords.`
-                : prospectResult.creditsRefunded > 0
-                  ? `✓ Found ${prospectResult.creditsUsed} of ${prospectResult.creditsReserved} emails — ${prospectResult.creditsUsed} credits used, ${prospectResult.creditsRefunded} credits refunded`
-                  : `✓ Found ${prospectResult.creditsUsed} emails — ${prospectResult.creditsUsed} credits used`}
+              {prospectResult.message
+                ? prospectResult.message
+                : prospectResult.creditsUsed === 0
+                  ? `No emails found — all ${prospectResult.creditsReserved} credits refunded. Try different keywords.`
+                  : prospectResult.creditsRefunded > 0
+                    ? `✓ Found ${prospectResult.creditsUsed} of ${prospectResult.creditsReserved} emails — ${prospectResult.creditsUsed} credits used, ${prospectResult.creditsRefunded} credits refunded`
+                    : `✓ Found ${prospectResult.creditsUsed} emails — ${prospectResult.creditsUsed} credits used`}
             </p>
             <Link href="/dashboard/find-contacts" className="text-sm font-medium text-brand-600 hover:text-brand-700">
               View all in Find Contacts →
