@@ -17,9 +17,9 @@ import {
   Search,
   Send,
   Sparkles,
-  Target,
   TrendingUp,
 } from "lucide-react";
+import { INITIAL_FREE_CREDITS } from "@/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { ExtractedLead, OutreachType, Proposal } from "@/types";
 import { formatCurrency } from "@/types";
@@ -121,6 +121,7 @@ export default function DashboardPage() {
   const [prospectError, setProspectError] = useState<string | null>(null);
   const [prospectResult, setProspectResult] = useState<BulkPayload | null>(null);
   const [rowComposers, setRowComposers] = useState<Record<string, RowComposerState>>({});
+  const pendingExampleRef = useRef<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -236,6 +237,19 @@ export default function DashboardPage() {
     }
   }
 
+  function handleExampleClick(exampleQuery: string) {
+    setQuery(exampleQuery);
+    pendingExampleRef.current = exampleQuery;
+  }
+
+  useEffect(() => {
+    if (!pendingExampleRef.current) return;
+    if (query !== pendingExampleRef.current) return;
+    pendingExampleRef.current = null;
+    const timer = setTimeout(() => handleFindProspects(), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
   async function handleGenerateAi(row: ProspectLead) {
     const key = rowKeyFor(row);
     const composer = rowComposers[key] ?? defaultComposer();
@@ -292,21 +306,35 @@ export default function DashboardPage() {
 
       <section className={cn("mb-8 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white", hasCreatedAnything ? "p-5 sm:p-6" : "p-6 sm:p-8")}>
         <h2 className={cn("font-black text-ink-900", hasCreatedAnything ? "text-2xl sm:text-3xl" : "text-3xl sm:text-4xl")}>
-          Don&apos;t have a prospect list? Describe who you want to reach.
+          Find your first leads in 10 seconds
         </h2>
         <p className="mt-2 text-sm sm:text-base text-ink-600">
-          Describe your ideal customers by industry and location — we&apos;ll find real companies and extract their contact emails.
+          Just click an example below — or type your own keyword.
         </p>
-        <button
-          type="button"
-          className="mt-4 flex items-center gap-1.5 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-left transition-colors hover:bg-orange-100"
-          onClick={() => setQuery("web design agencies in London")}
-        >
-          <span className="text-base leading-none">💡</span>
-          <span className="text-xs sm:text-sm text-orange-700 italic">
-            Try: &quot;web design agencies in London&quot; or &quot;SaaS startups in NYC&quot;
-          </span>
-        </button>
+        {credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything && (
+          <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now — it&apos;s free</p>
+        )}
+        <div className={cn("mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-4")}>
+          {["web design agencies in London", "SaaS startups in NYC", "dental clinics in LA"].map((example, i) => (
+            <button
+              key={example}
+              type="button"
+              disabled={prospectLoading}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50",
+                credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything
+                  ? "bg-orange-100 border-orange-300 hover:bg-orange-200"
+                  : "bg-orange-50 border-orange-200 hover:bg-orange-100"
+              )}
+              onClick={() => handleExampleClick(example)}
+            >
+              {i === 0 && <span className="text-base leading-none">💡</span>}
+              <span className={cn("text-xs sm:text-sm text-orange-700", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "font-medium" : "italic")}>
+                {example}
+              </span>
+            </button>
+          ))}
+        </div>
         <input
           className={cn("input-field mt-2 h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
           placeholder="Type your target industry + location, e.g. 'dental clinics in LA'"
