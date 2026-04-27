@@ -217,6 +217,7 @@ export async function POST(request: NextRequest) {
             source_url: row.source_url,
             company_name: row.company_name,
             emails: [{ email: row.email, source: row.source_url, confidence: row.email.startsWith("info@") || row.email.startsWith("hello@") ? "medium" : "high" }],
+            search_keyword: query.trim(),
           })
           .select("id")
           .single();
