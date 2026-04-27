@@ -31,38 +31,64 @@ const SERPER_NUM_RESULTS = 10;
 const GPT_TIMEOUT_MS = 4000;
 
 const SERPER_QUERY_SYSTEM = `The user describes what they sell.
-Return ONE simple Google search query to find businesses that would BUY this.
+Return exactly 2 different Google search queries to find businesses that would BUY this.
+Each query should target a DIFFERENT type of buyer.
 
-Your query must be a simple industry name + "contact email". Nothing fancy.
+Format: simple "[buyer industry] contact email"
 
 Examples:
-- "coffee machines" → "cafes and restaurants contact email"
-- "web design" → "law firms contact email"
-- "accounting services" → "small construction companies contact email"
-- "dental equipment" → "dental clinics contact email"
-- "HR software" → "manufacturing companies hiring contact email"
-- "fitness coaching" → "corporate offices HR department contact email"
-- "office furniture" → "coworking spaces contact email"
+- "coffee machines" →
+cafes and coffee shops contact email
+hotel restaurants contact email
 
-Keep it short. Just: [buyer industry] contact email
-Return ONLY the query. No quotes. No explanation.`;
+- "web design" →
+dental clinics contact email
+law firms contact email
+
+- "accounting services" →
+small construction companies contact email
+freelance contractors contact email
+
+- "Japanese language learning product" →
+international schools contact email
+corporate language training departments contact email
+
+- "fitness coaching" →
+corporate HR wellness programs contact email
+physical therapy clinics contact email
+
+- "dental equipment" →
+dental clinics contact email
+orthodontist offices contact email
+
+- "office furniture" →
+coworking spaces contact email
+startup offices contact email
+
+- "marketing services" →
+plumbing companies contact email
+auto repair shops contact email
+
+Return ONLY 2 queries, one per line. No numbers. No bullets. No explanation.`;
 
 function stripSellPrefixes(raw: string) {
   return raw.replace(/^(i sell|i offer|we sell|we offer|i provide|we provide|selling)\s+/i, "").trim();
 }
 
-function normalizeGptSerperQuery(text: string): string {
-  const line = text.trim().split("\n")[0]?.trim() ?? "";
-  const unquoted = line.replace(/^["'`]+|["'`]+$/g, "").trim();
-  return unquoted;
+function stripLineNoise(line: string) {
+  return line
+    .replace(/^[-*•]\s*/, "")
+    .replace(/^\d+[.)]\s*/, "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .trim();
 }
 
-async function buildSerperQueryFromGpt(userSellDescription: string, cleaned: string): Promise<string> {
+async function buildSerperQueriesFromGpt(userSellDescription: string, cleaned: string): Promise<string[]> {
   const fallback = `businesses that need ${cleaned || userSellDescription} contact email`;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) {
     console.log("[search-prospects] No OPENAI_API_KEY, using fallback Serper query");
-    return fallback;
+    return [fallback];
   }
 
   const controller = new AbortController();
@@ -73,12 +99,12 @@ async function buildSerperQueryFromGpt(userSellDescription: string, cleaned: str
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${openaiKey}`,
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 80,
-        temperature: 0.3,
+        max_tokens: 200,
+        temperature: 0,
         messages: [
           { role: "system", content: SERPER_QUERY_SYSTEM },
           { role: "user", content: userSellDescription },
@@ -89,23 +115,28 @@ async function buildSerperQueryFromGpt(userSellDescription: string, cleaned: str
 
     if (!response.ok) {
       console.warn("[search-prospects] OpenAI HTTP", response.status);
-      return fallback;
+      return [fallback];
     }
 
-    const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
-    const raw = data.choices?.[0]?.message?.content;
-    const q = typeof raw === "string" ? normalizeGptSerperQuery(raw) : "";
-    if (q.length > 0) {
-      console.log("[search-prospects] GPT Serper query:", q);
-      return q;
+    const gptData = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+    const gptText = gptData.choices?.[0]?.message?.content?.trim();
+    let queries = (typeof gptText === "string" ? gptText : "")
+      .split("\n")
+      .map((q) => stripLineNoise(q))
+      .filter((q) => q.length > 5 && q.length < 200)
+      .slice(0, 2);
+
+    if (queries.length === 0) {
+      queries = [fallback];
     }
+    console.log(`[GPT 쿼리 ${queries.length}개]`, queries);
+    return queries;
   } catch (e) {
-    console.log("[search-prospects] GPT Serper query failed, fallback:", e instanceof Error ? e.message : e);
+    console.log("[search-prospects] GPT Serper queries failed, fallback:", e instanceof Error ? e.message : e);
+    return [fallback];
   } finally {
     clearTimeout(timer);
   }
-
-  return fallback;
 }
 
 function isBlockedHost(hostname: string) {
@@ -205,46 +236,69 @@ export async function POST(request: NextRequest) {
 
     const keyword = query.trim();
     const cleaned = stripSellPrefixes(keyword) || keyword;
-    const serperQuery = await buildSerperQueryFromGpt(keyword, cleaned);
-    console.log("[search-prospects] Serper query:", serperQuery);
+    const queries = await buildSerperQueriesFromGpt(keyword, cleaned);
 
-    // ── Serper: 1회만 ──
-    const serperRes = await fetch(SERPER_ENDPOINT, {
-      method: "POST",
-      headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ q: serperQuery, num: SERPER_NUM_RESULTS }),
-    });
+    // ── Serper: queries.length회 병렬 ──
+    const serperPromises = queries.map((q) =>
+      fetch(SERPER_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "X-API-KEY": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ q, num: SERPER_NUM_RESULTS }),
+        signal: AbortSignal.timeout(3000),
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const errorBody = await r.text().catch(() => "");
+            console.error("[search-prospects] Serper error:", r.status, errorBody.slice(0, 200));
+            if (r.status === 429) {
+              throw new Error("Daily search limit reached. Try again tomorrow or contact support.");
+            }
+            return { organic: [] } as SerperResponse;
+          }
+          return (await r.json()) as SerperResponse;
+        })
+        .catch((err) => {
+          if (err instanceof Error && err.message.includes("Daily search limit")) throw err;
+          return { organic: [] } as SerperResponse;
+        })
+    );
 
-    if (!serperRes.ok) {
-      const errorBody = await serperRes.text().catch(() => "");
-      console.error("[search-prospects] Serper error:", serperRes.status, errorBody.slice(0, 300));
-      if (serperRes.status === 429) {
-        throw new Error("Daily search limit reached. Try again tomorrow or contact support.");
+    const serperResults = await Promise.all(serperPromises);
+
+    const allOrganic: SerperOrganicResult[] = [];
+    const seenLinks = new Set<string>();
+    for (const result of serperResults) {
+      for (const item of result.organic ?? []) {
+        const link = item.link;
+        if (!link || seenLinks.has(link)) continue;
+        seenLinks.add(link);
+        allOrganic.push(item);
       }
-      throw new Error(`Serper API returned ${serperRes.status}: ${errorBody.slice(0, 100)}`);
     }
-
-    const serperPayload = (await serperRes.json()) as SerperResponse;
-    const serperOrganic = serperPayload.organic ?? [];
-    console.log("[search-prospects] Serper OK — organic:", serperOrganic.length);
+    console.log(`[Serper] 쿼리 ${queries.length}개 → 합산 ${allOrganic.length}개`);
 
     const competitorKeywords = cleaned
       .toLowerCase()
       .split(/\s+/)
       .filter((w) => w.length > 2);
 
-    const filtered = serperOrganic.filter((result) => {
+    const filtered = allOrganic.filter((result) => {
       const titleAndLink = `${result.title || ""} ${result.link || ""}`.toLowerCase();
       return !competitorKeywords.some((w) => titleAndLink.includes(w));
     });
 
     const toScrapeOrganic =
-      filtered.length > 0 ? filtered.slice(0, targetCount) : serperOrganic.slice(0, targetCount);
+      filtered.length > 0 ? filtered.slice(0, targetCount) : allOrganic.slice(0, targetCount);
+
+    console.log(`[필터] ${allOrganic.length}개 → ${filtered.length}개 → 크롤링 ${toScrapeOrganic.length}개`);
 
     const mergedOrganic = dedupeBlocklistOrganic(toScrapeOrganic);
     const toScrape = mergedOrganic.slice(0, Math.min(MAX_CRAWL_URLS, targetCount, mergedOrganic.length));
     console.log(
-      `[search-prospects] organic ${serperOrganic.length} → filtered ${filtered.length} → deduped ${mergedOrganic.length} → crawl ${toScrape.length}`
+      `[search-prospects] deduped/blocklist ${mergedOrganic.length}개 → 실제 크롤 ${toScrape.length}개`
     );
 
     const candidates: string[] = toScrape.map((r) => r.link ?? "").filter(Boolean);
