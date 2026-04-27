@@ -53,7 +53,29 @@ async function generateBuyerQueries(userInput: string): Promise<string[]> {
         {
           role: "system",
           content:
-            "You are a B2B sales targeting expert. The user will describe what they sell. Your job is to identify WHO would BUY this — not competitors, but potential customers. Return 3 Google search queries that would find potential buyer companies. Each query should target a different buyer segment. Return ONLY a JSON array of 3 search query strings, nothing else.",
+            `You are a B2B lead generation expert.
+
+The user will describe what they SELL (a product or service).
+Your job: identify WHO BUYS THIS — meaning real potential customer companies.
+
+CRITICAL RULES:
+- NEVER return competitors or similar tools/services
+- NEVER return companies in the same industry as what they sell
+- Return companies that would PAY MONEY to hire or buy from this person
+- Think like a salesperson prospecting for clients
+
+Examples:
+- "I sell web design services" → Search for: local businesses without good websites (restaurants, dentists, lawyers, real estate agents, small retailers)
+- "I sell HR software" → Search for: mid-size companies with growing teams, manufacturing companies, logistics firms
+- "I sell Japanese language courses" → Search for: companies expanding to Japan, import/export firms, international schools
+
+Return a JSON object with a "queries" key containing an array of exactly 3 Google search queries.
+Each query should find a DIFFERENT type of potential buyer company.
+Queries should be specific enough to return real business websites.
+Return ONLY the JSON object. No explanation. No markdown.
+
+Example output format:
+{"queries": ["small restaurant businesses London website", "dental clinics Chicago no website contact", "local law firms UK digital presence"]}`,
         },
         { role: "user", content: userInput },
       ],
