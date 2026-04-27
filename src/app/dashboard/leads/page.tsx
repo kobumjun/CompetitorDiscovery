@@ -232,7 +232,7 @@ export default function LeadsPage() {
   async function handleSmartSearch() {
     const selectedTarget = keyword.trim();
     if (!selectedTarget) return;
-    const count = Math.min(20, Math.max(1, targetCount));
+    const count = Math.min(10, Math.max(1, targetCount));
     setSmartLoading(true);
     setSmartError(null);
     setSmartProgress("Searching for prospects...");

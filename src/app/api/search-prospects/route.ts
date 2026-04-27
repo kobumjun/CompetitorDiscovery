@@ -31,10 +31,10 @@ type ExtractedProspectRow = { email: string; source_url: string; company_name: s
 const SERPER_NUM_RESULTS = 10;
 const GPT_TIMEOUT_MS = 12_000;
 
-const TARGET_QUERY_PLANNER_SYSTEM = `You are a B2B outreach search planner. The user is NOT describing a product to sell. They are describing their TARGET: who they want to contact (prospect type, industry niche, media, blogs, communities, companies, or regions).
+const TARGET_QUERY_PLANNER_SYSTEM = `You are a B2B outreach search planner. The user describes who should receive their pitch or which sites to find: target recipients (e.g. blogs, agencies, cafés, communities)—NOT "what the user sells" as the main object. If the user only named a product (e.g. coffee machine), the message you receive may be expanded to "businesses/venues that may need that"—treat that as a target recipient search, not a product catalog search.
 
 Task:
-1. Read the user message as a "target audience / channel / prospect" description.
+1. Read the user message as a "target audience / who to contact" description (or an expanded "who may need this" if only a product was named).
 2. Generate between 8 and 12 different Google / web search query strings to discover REAL, relevant contact points (sites, media, partners, lead lists) for that target.
 3. Favor: blogs, newsletters, online communities, niche media, agencies, publishers, partnerships, and commercial operators likely to care about advertising, partnerships, or sponsorships — as appropriate to the user description.
 4. Avoid: generic K-12 schools, government education offices, generic corporate compliance training, unrelated HR/enterprise learning portals, unless the user explicitly asked for that.
@@ -53,6 +53,30 @@ The array must have 8 to 12 strings, each non-empty, each under 200 characters, 
 
 function stripSellPrefixes(raw: string) {
   return raw.replace(/^(i sell|i offer|we sell|we offer|i provide|we provide|selling)\s+/i, "").trim();
+}
+
+/** User named a recipient type (blogs, agencies, cafés, etc.) — pass through as target description. */
+const RECIPIENT_IN_INPUT =
+  /\b(blogs?|newsletters?|agenc(?:y|ies)|websites?|companies?|cafes?|cafe|restaurant|communities?|media|partners?|that may|may need|to contact|pitch|publishers?|operators?|sites?|learn(?:ing|ers?)?\s+blogs?)\b/i;
+/** Shorthand that looks like equipment/product only; expand to "who may need it" for the planner. */
+const PRODUCT_LIKE_SHORTHAND = /\b(coffee|espresso|beans?|vending|machine|machines|brewer|grinder|equipment|devices?|kiosk|oven|refrigerat(?:or|ion)|dispenser|appliance|brew|roast|roaster|brewery|barista)\b/i;
+
+function plannerUserMessageForGpt(keyword: string): string {
+  const t = keyword.trim();
+  if (RECIPIENT_IN_INPUT.test(t)) {
+    return t;
+  }
+  if (t.length < 100 && PRODUCT_LIKE_SHORTHAND.test(t)) {
+    console.log("[planner] expand product-like shorthand as target recipient search, raw:", t.slice(0, 80));
+    return [
+      "Target recipient search: find real businesses and commercial sites (e.g. cafés, coffee shops, restaurants, hospitality, retail) that may need or buy the following, and their contact or partnership points:",
+      `"${t}".`,
+      "Prioritize cafe, restaurant, coffee shop, and operator or venue websites, plus contact / advertising / partnership / sponsor discovery.",
+      "Do not lean on generic K-12, government education offices, or compliance training sites unless clearly relevant. Original user text (save context):",
+      t,
+    ].join(" ");
+  }
+  return t;
 }
 
 /** One representative email per site: prefer business-facing roles over generic. */
@@ -387,7 +411,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Reserve credits ──
-    const targetCount = Math.min(20, Math.max(1, Math.round(requestedCount ?? 3)));
+    const targetCount = Math.min(10, Math.max(1, Math.round(requestedCount ?? 3)));
     let reserve: { success: boolean; remaining: number };
     try {
       reserve = await reserveCredits(user.id, targetCount);
@@ -406,7 +430,8 @@ export async function POST(request: NextRequest) {
 
     const keyword = query.trim();
     const cleaned = stripSellPrefixes(keyword) || keyword;
-    const queries = await buildTargetSearchQueriesFromGpt(keyword, cleaned);
+    const plannerInput = plannerUserMessageForGpt(keyword);
+    const queries = await buildTargetSearchQueriesFromGpt(plannerInput, cleaned);
     console.log("[planner] generated search_queries count", queries.length);
 
     const { existingEmails, knownHostnames: dbKnownHosts } = await loadExistingEmailContext(supabase, user.id);

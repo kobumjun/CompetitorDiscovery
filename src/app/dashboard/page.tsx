@@ -175,6 +175,16 @@ export default function DashboardPage() {
       ? "Looks like a URL — use 'Already have a list of URLs? Extract in bulk' below."
       : null;
 
+  /** Steer users toward "who to pitch" (blogs, agencies, etc.), not product-only. */
+  const recipientHint =
+    /blog|newsletter|agenc|agencies|websites?|companies?|cafes?|cafe|restaurant|communities?|media|partners?|that may|may need|to contact|pitch|operators?|publishers?|sites?/i;
+  const showTargetRecipientHint =
+    query.trim().length > 0 &&
+    !queryInputError &&
+    !recipientHint.test(query) &&
+    query.trim().length < 120 &&
+    query.trim().split(/\s+/).length <= 8;
+
   const total = proposals.length;
   const sent = proposals.filter((p) => p.status === "sent" || p.status === "viewed").length;
   const accepted = proposals.filter((p) => p.status === "accepted").length;
@@ -200,7 +210,7 @@ export default function DashboardPage() {
   async function handleFindProspects() {
     const selectedTarget = query.trim();
     if (!selectedTarget) return;
-    const count = Math.min(20, Math.max(1, targetCount));
+    const count = Math.min(10, Math.max(1, targetCount));
     setProspectLoading(true);
     setProspectError(null);
     setProspectResult(null);
@@ -312,15 +322,17 @@ export default function DashboardPage() {
           Find your first leads in 10 seconds
         </h2>
         <p className="mt-2 text-sm sm:text-base text-ink-600">
-          Describe your ideal customers, partners, blogs, communities, or companies.
+          Enter the type of customers, partners, websites, blogs, communities, or companies you want to contact — not
+          what you sell.
         </p>
         {credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything && (
           <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now</p>
         )}
         <div className={cn("mt-3 flex flex-wrap gap-2", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-4")}>
           {[
-            "Japanese learning blogs and newsletters",
-            "B2B AI automation agencies in the US",
+            "cafes that may need coffee machines",
+            "Japanese learning blogs",
+            "AI automation agencies",
             "crypto finance media sites",
           ].map((text) => (
             <button
@@ -341,10 +353,10 @@ export default function DashboardPage() {
             </button>
           ))}
         </div>
-        <label className="mt-4 block text-sm font-medium text-ink-700">Who do you want to reach?</label>
+        <label className="mt-4 block text-sm font-medium text-ink-700">Who should receive your pitch?</label>
         <input
           className={cn("input-field mt-2 h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
-          placeholder="e.g. Japanese learning blogs and newsletters, AI automation agencies in the US, crypto finance media websites"
+          placeholder="e.g. cafes that may need coffee machines, Japanese learning blogs, AI automation agencies, crypto finance media sites"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -353,6 +365,12 @@ export default function DashboardPage() {
         />
         {queryInputError && (
           <p className="mt-1.5 text-sm text-red-600">{queryInputError}</p>
+        )}
+        {showTargetRecipientHint && (
+          <p className="mt-1.5 text-sm text-amber-800/90">
+            Tip: name <span className="font-medium">who you want to contact or pitch</span> (e.g. cafes that may need
+            coffee machines, or Japanese learning blogs) — not only a product like “coffee machines” by itself.
+          </p>
         )}
         <div className="mt-4">
           <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
