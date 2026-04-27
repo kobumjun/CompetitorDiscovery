@@ -10,7 +10,7 @@ const URL_TIMEOUT_MS = 4000;
 const OVERALL_TIMEOUT_MS = 55_000;
 const BATCH_SIZE = 3;
 const MAX_CRAWL_MS = 7000;
-const MAX_SERPER_URLS = 20;
+const MAX_SERPER_URLS = 50;
 const SEARCH_EXTRACT_PATHS = ["", "/contact", "/about"];
 
 const BLOCKED_HOSTS = [
@@ -29,51 +29,91 @@ type SerperOrganicResult = { link?: string; title?: string; snippet?: string };
 type SerperResponse = { organic?: SerperOrganicResult[] };
 type ExtractedProspectRow = { email: string; source_url: string; company_name: string; host: string };
 const SERPER_NUM_RESULTS = 10;
-const GPT_TIMEOUT_MS = 4000;
+const GPT_TIMEOUT_MS = 12_000;
 
-const SERPER_QUERY_SYSTEM = `The user describes what they sell.
-Return exactly 2 different Google search queries to find businesses that would BUY this.
-Each query should target a DIFFERENT type of buyer.
+const TARGET_QUERY_PLANNER_SYSTEM = `You are a B2B outreach search planner. The user is NOT describing a product to sell. They are describing their TARGET: who they want to contact (prospect type, industry niche, media, blogs, communities, companies, or regions).
 
-Format: simple "[buyer industry] contact email"
+Task:
+1. Read the user message as a "target audience / channel / prospect" description.
+2. Generate between 8 and 12 different Google / web search query strings to discover REAL, relevant contact points (sites, media, partners, lead lists) for that target.
+3. Favor: blogs, newsletters, online communities, niche media, agencies, publishers, partnerships, and commercial operators likely to care about advertising, partnerships, or sponsorships — as appropriate to the user description.
+4. Avoid: generic K-12 schools, government education offices, generic corporate compliance training, unrelated HR/enterprise learning portals, unless the user explicitly asked for that.
 
-Examples:
-- "coffee machines" →
-cafes and coffee shops contact email
-hotel restaurants contact email
+Each query:
+- should be 4–10 words, English is fine, natural search style.
+- should mix intent terms where it helps: contact, partnership, partnership inquiry, advertising, ads, sponsor, sponsorship, newsletter, blog, community, agency, company, US, UK, global (only if the user did not name a non-English market).
+- may include "email" or "write for us" or "advertise" where relevant.
+- should stay tightly aligned to the user target (e.g. "Japanese learning" → Japanese learning content sites, not generic universities).
 
-- "web design" →
-dental clinics contact email
-law firms contact email
+Output format:
+Return a single valid JSON object ONLY, no markdown, in this form:
+{ "search_queries": [ "query1", "query2", ... ] }
 
-- "accounting services" →
-small construction companies contact email
-freelance contractors contact email
-
-- "Japanese language learning product" →
-international schools contact email
-corporate language training departments contact email
-
-- "fitness coaching" →
-corporate HR wellness programs contact email
-physical therapy clinics contact email
-
-- "dental equipment" →
-dental clinics contact email
-orthodontist offices contact email
-
-- "office furniture" →
-coworking spaces contact email
-startup offices contact email
-
-- "marketing services" →
-plumbing companies contact email
-auto repair shops contact email
-
-Return ONLY 2 queries, one per line. No numbers. No bullets. No explanation.`;
+The array must have 8 to 12 strings, each non-empty, each under 200 characters, no duplicate strings.`;
 
 function stripSellPrefixes(raw: string) {
   return raw.replace(/^(i sell|i offer|we sell|we offer|i provide|we provide|selling)\s+/i, "").trim();
+}
+
+/** One representative email per site: prefer business-facing roles over generic. */
+const EMAIL_PREFIX_PRIORITY = [
+  "partnership",
+  "partnerships",
+  "partner",
+  "advertising",
+  "adteam",
+  "adverts",
+  "ads",
+  "sponsor",
+  "sponsorship",
+  "sponsored",
+  "marketing",
+  "growth",
+  "business",
+  "bd",
+  "contact",
+  "hello",
+  "hi",
+  "sales",
+  "info",
+  "press",
+  "media",
+  "editorial",
+  "content",
+  "editor",
+  "support",
+] as const;
+
+const EXCLUDED_LOCAL_PREFIX = /^(career|careers|recruit|recruitment|job|jobs|intern|hr|people|humanresources|apply|hiring|talent|unsubscribe|dmca|phishing|abuse|security|compliance|privacy|legal|copyright|licensing|webmaster|postmaster|no-?reply|no-?replies|mailer-daemon|bounces?|return|undeliverable|donotreply|root|system|uploader|devops?|noc|ithelp)/i;
+
+function scoreLocalPartForTarget(email: string): number {
+  const at = email.indexOf("@");
+  if (at < 0) return -1;
+  const rawLocal = email.slice(0, at).toLowerCase();
+  const local = rawLocal.split("+")[0] || rawLocal;
+  if (EXCLUDED_LOCAL_PREFIX.test(local) || /^(admin|webmaster|noreply|no-reply)$/i.test(local)) {
+    return -1000;
+  }
+  for (let i = 0; i < EMAIL_PREFIX_PRIORITY.length; i++) {
+    const p = EMAIL_PREFIX_PRIORITY[i]!;
+    if (local === p || local.startsWith(p + ".") || local.startsWith(p + "-")) {
+      return 10_000 - i;
+    }
+  }
+  return 1000;
+}
+
+function selectPreferredTargetEmail(candidates: string[] | undefined): string | null {
+  if (!candidates?.length) return null;
+  const scored: { email: string; score: number }[] = [];
+  for (const e of candidates) {
+    if (!e.includes("@")) continue;
+    const s = scoreLocalPartForTarget(e);
+    if (s > -500) scored.push({ email: e, score: s });
+  }
+  if (scored.length === 0) return null;
+  scored.sort((a, b) => b.score - a.score || a.email.toLowerCase().localeCompare(b.email.toLowerCase()));
+  return scored[0]!.email;
 }
 
 function stripLineNoise(line: string) {
@@ -92,12 +132,45 @@ function hostOfLink(link: string | undefined): string | null {
   return host || null;
 }
 
-async function buildSerperQueriesFromGpt(userSellDescription: string, cleaned: string): Promise<string[]> {
-  const fallback = `businesses that need ${cleaned || userSellDescription} contact email`;
+function fallbackTargetQueries(cleaned: string): string[] {
+  const t = (cleaned || "media partners").toLowerCase();
+  const out = [
+    `${t} blog contact email`,
+    `${t} newsletter contact advertising`,
+    `${t} website partnership US`,
+    `${t} community contact`,
+    `${t} advertising sponsor contact`,
+    `${t} write for us blog`,
+    `${t} media contact partnership`,
+    `${t} company contact email`,
+  ];
+  return [...new Set(out.map((q) => q.replace(/\s+/g, " ").trim()))].filter((q) => q.length > 8);
+}
+
+function parseQueryPlannerJson(text: string): string[] {
+  const t = text.trim();
+  const jsonMatch = t.match(/\{[\s\S]*"search_queries"[\s\S]*\}/);
+  const raw = jsonMatch ? jsonMatch[0] : t;
+  try {
+    const parsed = JSON.parse(raw) as { search_queries?: unknown };
+    const ar = parsed.search_queries;
+    if (Array.isArray(ar)) {
+      return ar
+        .map((q) => (typeof q === "string" ? stripLineNoise(q) : ""))
+        .filter((q) => q.length > 4 && q.length < 200);
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+async function buildTargetSearchQueriesFromGpt(targetDescription: string, cleaned: string): Promise<string[]> {
+  const fallbackBlock = fallbackTargetQueries(cleaned);
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) {
-    console.log("[search-prospects] No OPENAI_API_KEY, using fallback Serper query");
-    return [fallback];
+    console.log("[search-prospects] No OPENAI_API_KEY, using fallback target queries", fallbackBlock.length, "q");
+    return fallbackBlock;
   }
 
   const controller = new AbortController();
@@ -112,11 +185,11 @@ async function buildSerperQueriesFromGpt(userSellDescription: string, cleaned: s
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 200,
+        max_tokens: 1800,
         temperature: 0,
         messages: [
-          { role: "system", content: SERPER_QUERY_SYSTEM },
-          { role: "user", content: userSellDescription },
+          { role: "system", content: TARGET_QUERY_PLANNER_SYSTEM },
+          { role: "user", content: targetDescription },
         ],
       }),
       signal: controller.signal,
@@ -124,25 +197,39 @@ async function buildSerperQueriesFromGpt(userSellDescription: string, cleaned: s
 
     if (!response.ok) {
       console.warn("[search-prospects] OpenAI HTTP", response.status);
-      return [fallback];
+      return fallbackBlock;
     }
 
     const gptData = (await response.json()) as { choices?: { message?: { content?: string } }[] };
     const gptText = gptData.choices?.[0]?.message?.content?.trim();
-    let queries = (typeof gptText === "string" ? gptText : "")
-      .split("\n")
-      .map((q) => stripLineNoise(q))
-      .filter((q) => q.length > 5 && q.length < 200)
-      .slice(0, 2);
+    let queries = parseQueryPlannerJson(typeof gptText === "string" ? gptText : "");
+    const seenQ = new Set<string>();
+    queries = queries
+      .filter((q) => {
+        const k = q.toLowerCase();
+        if (seenQ.has(k)) return false;
+        seenQ.add(k);
+        return true;
+      })
+      .slice(0, 12);
 
-    if (queries.length === 0) {
-      queries = [fallback];
+    if (queries.length < 8) {
+      for (const f of fallbackBlock) {
+        if (queries.length >= 12) break;
+        if (!seenQ.has(f.toLowerCase())) {
+          seenQ.add(f.toLowerCase());
+          queries.push(f);
+        }
+      }
     }
-    console.log(`[GPT 쿼리 ${queries.length}개]`, queries);
+    if (queries.length < 5) {
+      return fallbackBlock;
+    }
+    console.log(`[planner] ${queries.length} search queries for Serper:`, JSON.stringify(queries));
     return queries;
   } catch (e) {
-    console.log("[search-prospects] GPT Serper queries failed, fallback:", e instanceof Error ? e.message : e);
-    return [fallback];
+    console.log("[search-prospects] Target query planner failed, fallback:", e instanceof Error ? e.message : e);
+    return fallbackBlock;
   } finally {
     clearTimeout(timer);
   }
@@ -259,21 +346,14 @@ async function tryExtractFromUrl(
   });
   if (!extraction.ok || extraction.emails.length === 0) return { newRows: [], dupRows: [] };
   const ok = extraction as OkExtraction;
-  const newRows: ExtractedProspectRow[] = [];
-  const dupRows: ExtractedProspectRow[] = [];
-  const pageSeen = new Set<string>();
-  for (const email of ok.emails) {
-    const el = email.toLowerCase();
-    if (!el.includes("@")) continue;
-    const row = rowFromExtraction(ok, email);
-    if (emailSeen.has(el) || pageSeen.has(el)) {
-      dupRows.push(row);
-    } else {
-      pageSeen.add(el);
-      newRows.push(row);
-    }
+  const best = selectPreferredTargetEmail(ok.emails);
+  if (!best) return { newRows: [], dupRows: [] };
+  const row = rowFromExtraction(ok, best);
+  const el = row.email.toLowerCase();
+  if (emailSeen.has(el)) {
+    return { newRows: [], dupRows: [row] };
   }
-  return { newRows, dupRows };
+  return { newRows: [row], dupRows: [] };
 }
 
 export async function POST(request: NextRequest) {
@@ -326,11 +406,13 @@ export async function POST(request: NextRequest) {
 
     const keyword = query.trim();
     const cleaned = stripSellPrefixes(keyword) || keyword;
-    const queries = await buildSerperQueriesFromGpt(keyword, cleaned);
+    const queries = await buildTargetSearchQueriesFromGpt(keyword, cleaned);
+    console.log("[planner] generated search_queries count", queries.length);
 
     const { existingEmails, knownHostnames: dbKnownHosts } = await loadExistingEmailContext(supabase, user.id);
     // Session-level tracking (clone so we can mutate for same-run dedupe)
     const emailSeen = new Set<string>(existingEmails);
+    const hostSession = new Set<string>(dbKnownHosts);
 
     // ── Serper: parallel (num=10 each) ──
     const serperPromises = queries.map((q) =>
@@ -371,19 +453,8 @@ export async function POST(request: NextRequest) {
       if (allOrganic.length >= MAX_SERPER_URLS) break;
     }
     console.log(`[Serper] 쿼리 ${queries.length}개 → 합산 ${allOrganic.length}개 (도메인 중복 제거)`);
-
-    const competitorKeywords = cleaned
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((w) => w.length > 2);
-
-    const filtered = allOrganic.filter((result) => {
-      const titleAndLink = `${result.title || ""} ${result.link || ""}`.toLowerCase();
-      return !competitorKeywords.some((w) => titleAndLink.includes(w));
-    });
-
-    const candidates = filtered.length > 0 ? filtered : allOrganic;
-    console.log(`[필터] ${allOrganic.length}개 → ${filtered.length}개`);
+    // Target-based search: do not use keyword-competitor strip on results (it removes relevant matches).
+    const candidates = allOrganic;
 
     const blocklisted = dedupeBlocklistOrganic(candidates);
     const ordered = deprioritizeKnownHostSerpItems(blocklisted, dbKnownHosts);
@@ -444,10 +515,16 @@ export async function POST(request: NextRequest) {
         for (const r of newRows) {
           if (newResultRows.length >= targetCount) break;
           const el = r.email.toLowerCase();
+          const h = (r.host || "").toLowerCase();
+          if (h && hostSession.has(h)) {
+            dupResultRows.push(r);
+            continue;
+          }
           if (emailSeen.has(el)) {
             dupResultRows.push(r);
             continue;
           }
+          if (h) hostSession.add(h);
           emailSeen.add(el);
           newResultRows.push(r);
         }
@@ -528,6 +605,7 @@ export async function POST(request: NextRequest) {
       candidateUrlsTotal: candidateUrls.length,
       creditsUsed,
       creditsRefunded,
+      plannerQueryCount: queries.length,
     };
 
     const dupPart =
@@ -556,6 +634,7 @@ export async function POST(request: NextRequest) {
       success: true,
       leads,
       stats,
+      generatedSearchQueries: queries,
       duplicateLeads: dupResultRows.map((r) => ({
         email: r.email,
         company_name: r.company_name,

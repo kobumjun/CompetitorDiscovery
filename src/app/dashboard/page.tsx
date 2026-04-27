@@ -55,8 +55,10 @@ type BulkPayload = {
     candidateUrlsTotal: number;
     creditsUsed: number;
     creditsRefunded: number;
+    plannerQueryCount?: number;
   };
   duplicateLeads?: { email: string; company_name: string; source_url: string; duplicate?: boolean }[];
+  generatedSearchQueries?: string[];
 };
 
 type RowComposerState = {
@@ -168,7 +170,7 @@ export default function DashboardPage() {
   const queryHasEmail = query.includes("@");
   const queryHasUrl = /https?:\/\/|www\.|\.com\b|\.io\b|\.org\b|\.net\b/i.test(query);
   const queryInputError = queryHasEmail
-    ? "This isn't for email addresses — describe the type of business you want to reach instead."
+    ? "This isn't for email addresses — describe who you want to reach in plain words."
     : queryHasUrl
       ? "Looks like a URL — use 'Already have a list of URLs? Extract in bulk' below."
       : null;
@@ -310,13 +312,17 @@ export default function DashboardPage() {
           Find your first leads in 10 seconds
         </h2>
         <p className="mt-2 text-sm sm:text-base text-ink-600">
-          Describe what you sell — we&apos;ll find your ideal customers.
+          Describe your ideal customers, partners, blogs, communities, or companies.
         </p>
         {credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything && (
           <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now</p>
         )}
         <div className={cn("mt-3 flex flex-wrap gap-2", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-4")}>
-          {["coffee machines", "accounting services", "web design"].map((text) => (
+          {[
+            "Japanese learning blogs and newsletters",
+            "B2B AI automation agencies in the US",
+            "crypto finance media sites",
+          ].map((text) => (
             <button
               key={text}
               type="button"
@@ -335,10 +341,10 @@ export default function DashboardPage() {
             </button>
           ))}
         </div>
-        <label className="mt-4 block text-sm font-medium text-ink-700">What do you sell?</label>
+        <label className="mt-4 block text-sm font-medium text-ink-700">Who do you want to reach?</label>
         <input
           className={cn("input-field mt-2 h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
-          placeholder="Describe what you sell, e.g. 'coffee machines' or 'web design services'"
+          placeholder="e.g. Japanese learning blogs and newsletters, AI automation agencies in the US, crypto finance media websites"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -359,7 +365,7 @@ export default function DashboardPage() {
           disabled={prospectLoading || !query.trim() || !!queryInputError || credits === 0 || (credits !== null && targetCount > credits)}
         >
           <Search className="w-4 h-4 mr-1.5" />
-          Find {targetCount} Prospects & Emails
+          Find {targetCount} Target Emails
           <ArrowRight className="w-4 h-4 ml-1.5" />
         </button>
         <p className="mt-2 text-xs text-ink-500">
