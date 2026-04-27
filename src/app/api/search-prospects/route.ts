@@ -34,20 +34,14 @@ function isBlockedHost(hostname: string) {
   return BLOCKED_HOSTS.some((b) => hostname === b || hostname.endsWith(`.${b}`));
 }
 
-function buildSearchProspectsFromUserInput(keyword: string) {
-  let cleaned = keyword
-    .replace(/^(i sell|i offer|i provide|i make|we sell|we offer|we provide|selling|offering)\s+/i, "")
-    .trim();
+function getCleanedSellerPhrase(keyword: string): string {
+  let cleaned = keyword.replace(/^(i sell|i offer|i provide|we sell|we offer)\s+/i, "").trim();
   if (!cleaned) cleaned = keyword.trim();
+  return cleaned;
+}
 
-  const words = cleaned.toLowerCase().split(/\s+/).filter(Boolean);
-  const longWords = words.filter((w) => w.length > 3);
-  const competitorKeywords = Array.from(new Set([cleaned.toLowerCase(), ...words, ...longWords]));
-  const searchQuery = `businesses that need ${cleaned} contact email`;
-
-  console.log(`[쿼리 변환] "${keyword}" → 검색: "${searchQuery}" / 경쟁사 키워드: ${competitorKeywords.join(", ")}`);
-
-  return { cleaned, words, competitorKeywords, searchQuery };
+function buildCompetitorKeywordsFromCleaned(cleaned: string): string[] {
+  return cleaned.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
 }
 
 async function maybeRefineSearchQueryWithGpt(cleaned: string, fallbackQuery: string): Promise<string> {
@@ -63,13 +57,47 @@ async function maybeRefineSearchQueryWithGpt(cleaned: string, fallbackQuery: str
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 100,
+        max_tokens: 150,
         temperature: 0.7,
         messages: [
           {
             role: "system",
-            content:
-              "The user describes what they sell. Return ONE Google search query to find businesses that would BUY this. Find CUSTOMERS not competitors. Return ONLY the query string, nothing else.",
+            content: `The user describes what they SELL.
+Write ONE Google search query to find businesses that would BUY this.
+
+ABSOLUTE RULE: Your search query must NOT contain ANY word from what the user sells.
+Instead, search for the BUYER'S industry directly.
+
+Think step by step:
+1. What type of business would pay money for this?
+2. Search for THAT type of business by their industry name.
+
+Examples:
+- User sells "fitness coaching" → Buyers: corporations with employees, HR departments
+  → Query: "corporate offices employee wellness program contact email"
+  (NO "fitness", NO "coaching", NO "training" in the query)
+
+- User sells "web design services" → Buyers: small businesses without good websites
+  → Query: "small restaurant owner contact email"
+  (NO "web", NO "design", NO "agency" in the query)
+
+- User sells "coffee machines" → Buyers: cafes, restaurants, offices
+  → Query: "new cafe opening contact email"
+  (NO "coffee", NO "machine" in the query)
+
+- User sells "accounting services" → Buyers: small business owners
+  → Query: "small business owner freelancer contact"
+  (NO "accounting", NO "bookkeeping" in the query)
+
+- User sells "dental equipment" → Buyers: dental clinics
+  → Query: "dental clinic private practice contact email"
+  (NO "equipment", NO "supplier" in the query. "dental" is OK because dental clinics ARE the buyer)
+
+- User sells "HR software" → Buyers: growing companies that hire people
+  → Query: "manufacturing company hiring employees contact"
+  (NO "HR", NO "software" in the query)
+
+Return ONLY the search query string. Nothing else. No quotes. No explanation.`,
           },
           { role: "user", content: cleaned },
         ],
@@ -111,23 +139,17 @@ function dedupeBlocklistOrganic(organic: SerperOrganicResult[]): SerperOrganicRe
   return out;
 }
 
-function filterSerperOrganicBySellerSignals(
+function filterSerperOrganicByCompetitorKeywords(
   organic: SerperOrganicResult[],
-  cleaned: string,
-  words: string[]
+  competitorKeywords: string[]
 ): SerperOrganicResult[] {
-  const cleanedLower = cleaned.toLowerCase();
-  const longWords = words.filter((w) => w.length > 3);
+  const kws = competitorKeywords.map((w) => w.toLowerCase()).filter(Boolean);
+  if (kws.length === 0) return organic;
 
-  const filtered = organic.filter((result) => {
-    const text = `${result.title ?? ""} ${result.snippet ?? ""} ${result.link ?? ""}`.toLowerCase();
-    if (text.includes(cleanedLower)) return false;
-    const matchCount = longWords.filter((w) => text.includes(w)).length;
-    if (matchCount >= 2 && longWords.length >= 2) return false;
-    return true;
+  return organic.filter((result) => {
+    const titleAndLink = `${result.title ?? ""} ${result.link ?? ""}`.toLowerCase();
+    return !kws.some((w) => titleAndLink.includes(w));
   });
-
-  return filtered.length > 0 ? filtered : organic;
 }
 
 async function runWithConcurrency<TInput, TOutput>(
@@ -199,10 +221,14 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     const isTimedOut = () => Date.now() - startTime > OVERALL_TIMEOUT_MS;
 
-    // ── 쿼리 변환: 템플릿(0ms) + 선택적 GPT(최대 4초) ──
-    const built = buildSearchProspectsFromUserInput(query.trim());
-    const serperQuery = await maybeRefineSearchQueryWithGpt(built.cleaned, built.searchQuery);
-    console.log("[search-prospects] Serper query (1회):", serperQuery);
+    // ── cleaned → GPT Serper 쿼리(최대 4초) → 경쟁사 키워드(Serper 전) ──
+    const cleaned = getCleanedSellerPhrase(query.trim());
+    const fallbackSerperQuery = `businesses that need ${cleaned} contact email`;
+    const serperQuery = await maybeRefineSearchQueryWithGpt(cleaned, fallbackSerperQuery);
+    const competitorKeywords = buildCompetitorKeywordsFromCleaned(cleaned);
+    console.log(
+      `[쿼리 변환] "${query.trim()}" → Serper: "${serperQuery}" / 경쟁사 키워드(title+link): ${competitorKeywords.join(", ") || "(없음)"}`
+    );
 
     // ── Serper: 1회만 ──
     const serperRes = await fetch(SERPER_ENDPOINT, {
@@ -225,8 +251,11 @@ export async function POST(request: NextRequest) {
     console.log("[search-prospects] Serper OK — organic:", serperOrganic.length);
 
     const mergedOrganic = dedupeBlocklistOrganic(serperOrganic);
-    const filteredOrganic = filterSerperOrganicBySellerSignals(mergedOrganic, built.cleaned, built.words);
-    const toScrape = filteredOrganic.slice(0, MAX_CRAWL_URLS);
+    const filteredOrganic = filterSerperOrganicByCompetitorKeywords(mergedOrganic, competitorKeywords);
+    const toScrape =
+      filteredOrganic.length > 0
+        ? filteredOrganic.slice(0, MAX_CRAWL_URLS)
+        : mergedOrganic.slice(0, MAX_CRAWL_URLS);
     console.log(`[필터] ${serperOrganic.length}개 → ${filteredOrganic.length}개 → ${toScrape.length}개 크롤링`);
 
     const candidates: string[] = toScrape.map((r) => r.link ?? "").filter(Boolean);
