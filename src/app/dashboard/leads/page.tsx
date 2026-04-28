@@ -446,11 +446,15 @@ export default function LeadsPage() {
       </div>
 
       <div className="card p-4 mb-6">
+        <h2 className="text-xl font-bold text-ink-900 sm:text-2xl">Find your first leads in 10 seconds</h2>
+        <p className="mt-1 text-sm text-ink-600 sm:text-base">
+          Describe what you sell — we&apos;ll find your ideal customers.
+        </p>
         <label className="text-sm font-medium text-ink-700 mb-2 block">
           What do you sell?
         </label>
         <div className="mb-3 flex flex-wrap gap-2">
-          {["coffee machines", "accounting services", "web design"].map((text) => (
+          {["coffee machines", "accounting services", "web design"].map((text, i) => (
             <button
               key={text}
               type="button"
@@ -458,13 +462,16 @@ export default function LeadsPage() {
               disabled={smartLoading}
               onClick={() => setKeyword(text)}
             >
+              {i === 0 && <span className="mr-1 text-base leading-none">☕</span>}
+              {i === 1 && <span className="mr-1 text-base leading-none">📊</span>}
+              {i === 2 && <span className="mr-1 text-base leading-none">🎨</span>}
               {text}
             </button>
           ))}
         </div>
         <input
           className={cn("input-field h-12", keywordInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
-          placeholder="Describe what you sell, e.g. 'coffee machines' or 'web design services'"
+          placeholder="e.g. coffee machines, web design, accounting services"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           onKeyDown={(e) => {

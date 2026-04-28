@@ -170,20 +170,10 @@ export default function DashboardPage() {
   const queryHasEmail = query.includes("@");
   const queryHasUrl = /https?:\/\/|www\.|\.com\b|\.io\b|\.org\b|\.net\b/i.test(query);
   const queryInputError = queryHasEmail
-    ? "This isn't for email addresses — describe who you want to reach in plain words."
+    ? "This isn't for email addresses — describe the type of business you sell to instead."
     : queryHasUrl
       ? "Looks like a URL — use 'Already have a list of URLs? Extract in bulk' below."
       : null;
-
-  /** Steer users toward "who to pitch" (blogs, agencies, etc.), not product-only. */
-  const recipientHint =
-    /blog|newsletter|agenc|agencies|websites?|companies?|cafes?|cafe|restaurant|communities?|media|partners?|that may|may need|to contact|pitch|operators?|publishers?|sites?/i;
-  const showTargetRecipientHint =
-    query.trim().length > 0 &&
-    !queryInputError &&
-    !recipientHint.test(query) &&
-    query.trim().length < 120 &&
-    query.trim().split(/\s+/).length <= 8;
 
   const total = proposals.length;
   const sent = proposals.filter((p) => p.status === "sent" || p.status === "viewed").length;
@@ -322,19 +312,13 @@ export default function DashboardPage() {
           Find your first leads in 10 seconds
         </h2>
         <p className="mt-2 text-sm sm:text-base text-ink-600">
-          Enter the type of customers, partners, websites, blogs, communities, or companies you want to contact — not
-          what you sell.
+          Describe what you sell — we&apos;ll find your ideal customers.
         </p>
         {credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything && (
           <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now</p>
         )}
         <div className={cn("mt-3 flex flex-wrap gap-2", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-4")}>
-          {[
-            "cafes that may need coffee machines",
-            "Japanese learning blogs",
-            "AI automation agencies",
-            "crypto finance media sites",
-          ].map((text) => (
+          {["coffee machines", "accounting services", "web design"].map((text, i) => (
             <button
               key={text}
               type="button"
@@ -347,16 +331,19 @@ export default function DashboardPage() {
               )}
               onClick={() => setQuery(text)}
             >
+              {i === 0 && <span className="mr-1 text-base leading-none">☕</span>}
+              {i === 1 && <span className="mr-1 text-base leading-none">📊</span>}
+              {i === 2 && <span className="mr-1 text-base leading-none">🎨</span>}
               <span className={cn("text-xs sm:text-sm text-orange-700", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "font-medium" : "italic")}>
                 {text}
               </span>
             </button>
           ))}
         </div>
-        <label className="mt-4 block text-sm font-medium text-ink-700">Who should receive your pitch?</label>
+        <label className="mt-4 block text-sm font-medium text-ink-700">What do you sell?</label>
         <input
           className={cn("input-field mt-2 h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
-          placeholder="e.g. cafes that may need coffee machines, Japanese learning blogs, AI automation agencies, crypto finance media sites"
+          placeholder="e.g. coffee machines, web design, accounting services"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -365,12 +352,6 @@ export default function DashboardPage() {
         />
         {queryInputError && (
           <p className="mt-1.5 text-sm text-red-600">{queryInputError}</p>
-        )}
-        {showTargetRecipientHint && (
-          <p className="mt-1.5 text-sm text-amber-800/90">
-            Tip: name <span className="font-medium">who you want to contact or pitch</span> (e.g. cafes that may need
-            coffee machines, or Japanese learning blogs) — not only a product like “coffee machines” by itself.
-          </p>
         )}
         <div className="mt-4">
           <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
@@ -383,7 +364,7 @@ export default function DashboardPage() {
           disabled={prospectLoading || !query.trim() || !!queryInputError || credits === 0 || (credits !== null && targetCount > credits)}
         >
           <Search className="w-4 h-4 mr-1.5" />
-          Find {targetCount} Target Emails
+          Find {targetCount} Prospects & Emails
           <ArrowRight className="w-4 h-4 ml-1.5" />
         </button>
         <p className="mt-2 text-xs text-ink-500">

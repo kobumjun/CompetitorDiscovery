@@ -10,7 +10,7 @@ const URL_TIMEOUT_MS = 4000;
 const OVERALL_TIMEOUT_MS = 55_000;
 const BATCH_SIZE = 3;
 const MAX_CRAWL_MS = 7000;
-const MAX_SERPER_URLS = 50;
+const MAX_SERPER_URLS = 20;
 const SEARCH_EXTRACT_PATHS = ["", "/contact", "/about"];
 
 const BLOCKED_HOSTS = [
@@ -29,54 +29,42 @@ type SerperOrganicResult = { link?: string; title?: string; snippet?: string };
 type SerperResponse = { organic?: SerperOrganicResult[] };
 type ExtractedProspectRow = { email: string; source_url: string; company_name: string; host: string };
 const SERPER_NUM_RESULTS = 10;
-const GPT_TIMEOUT_MS = 12_000;
+const GPT_TIMEOUT_MS = 4000;
 
-const TARGET_QUERY_PLANNER_SYSTEM = `You are a B2B outreach search planner. The user describes who should receive their pitch or which sites to find: target recipients (e.g. blogs, agencies, cafés, communities)—NOT "what the user sells" as the main object. If the user only named a product (e.g. coffee machine), the message you receive may be expanded to "businesses/venues that may need that"—treat that as a target recipient search, not a product catalog search.
+const SELLER_TO_BUYER_SYSTEM_PROMPT = `The user describes what they sell.
+Do two things:
 
-Task:
-1. Read the user message as a "target audience / who to contact" description (or an expanded "who may need this" if only a product was named).
-2. Generate between 8 and 12 different Google / web search query strings to discover REAL, relevant contact points (sites, media, partners, lead lists) for that target.
-3. Favor: blogs, newsletters, online communities, niche media, agencies, publishers, partnerships, and commercial operators likely to care about advertising, partnerships, or sponsorships — as appropriate to the user description.
-4. Avoid: generic K-12 schools, government education offices, generic corporate compliance training, unrelated HR/enterprise learning portals, unless the user explicitly asked for that.
+1. Return exactly 2 Google search queries to find businesses that would BUY this.
+   Each query targets a DIFFERENT buyer type.
+   Format: "[specific buyer industry] contact email"
+   IMPORTANT: queries must NOT contain words from what the user sells.
 
-Each query:
-- should be 4–10 words, English is fine, natural search style.
-- should mix intent terms where it helps: contact, partnership, partnership inquiry, advertising, ads, sponsor, sponsorship, newsletter, blog, community, agency, company, US, UK, global (only if the user did not name a non-English market).
-- may include "email" or "write for us" or "advertise" where relevant.
-- should stay tightly aligned to the user target (e.g. "Japanese learning" → Japanese learning content sites, not generic universities).
+2. Return competitor keywords (words that identify companies selling the same thing as the user).
 
-Output format:
-Return a single valid JSON object ONLY, no markdown, in this form:
-{ "search_queries": [ "query1", "query2", ... ] }
+Return ONLY this JSON:
+{
+  "queries": ["query1", "query2"],
+  "competitor_keywords": ["kw1", "kw2", "kw3"]
+}
 
-The array must have 8 to 12 strings, each non-empty, each under 200 characters, no duplicate strings.`;
+Examples:
+- "coffee machines" → {"queries":["cafes and coffee shops contact email","hotel restaurants contact email"],"competitor_keywords":["coffee machine","espresso","vending"]}
+- "web design" → {"queries":["dental clinics contact email","law firms contact email"],"competitor_keywords":["web design","web agency","digital agency","website builder"]}
+- "accounting services" → {"queries":["small construction companies contact email","freelance contractors contact email"],"competitor_keywords":["accounting","bookkeeping","CPA firm","tax services"]}
+- "Japanese language learning product" → {"queries":["international schools contact email","corporate language training departments contact email"],"competitor_keywords":["language learning","language school","Japanese course","language app"]}
+- "fitness coaching" → {"queries":["corporate HR wellness programs contact email","physical therapy clinics contact email"],"competitor_keywords":["fitness coach","personal trainer","gym","fitness program"]}
+- "dental equipment" → {"queries":["dental clinics contact email","orthodontist offices contact email"],"competitor_keywords":["dental equipment","dental supply","dental tools"]}
+- "marketing services" → {"queries":["plumbing companies contact email","auto repair shops contact email"],"competitor_keywords":["marketing agency","digital marketing","SEO agency","advertising"]}
+- "office furniture" → {"queries":["coworking spaces contact email","startup offices contact email"],"competitor_keywords":["office furniture","desk supplier","chair manufacturer"]}
+
+No explanation. Return ONLY the JSON.`;
 
 function stripSellPrefixes(raw: string) {
   return raw.replace(/^(i sell|i offer|we sell|we offer|i provide|we provide|selling)\s+/i, "").trim();
 }
 
-/** User named a recipient type (blogs, agencies, cafés, etc.) — pass through as target description. */
-const RECIPIENT_IN_INPUT =
-  /\b(blogs?|newsletters?|agenc(?:y|ies)|websites?|companies?|cafes?|cafe|restaurant|communities?|media|partners?|that may|may need|to contact|pitch|publishers?|operators?|sites?|learn(?:ing|ers?)?\s+blogs?)\b/i;
-/** Shorthand that looks like equipment/product only; expand to "who may need it" for the planner. */
-const PRODUCT_LIKE_SHORTHAND = /\b(coffee|espresso|beans?|vending|machine|machines|brewer|grinder|equipment|devices?|kiosk|oven|refrigerat(?:or|ion)|dispenser|appliance|brew|roast|roaster|brewery|barista)\b/i;
-
-function plannerUserMessageForGpt(keyword: string): string {
-  const t = keyword.trim();
-  if (RECIPIENT_IN_INPUT.test(t)) {
-    return t;
-  }
-  if (t.length < 100 && PRODUCT_LIKE_SHORTHAND.test(t)) {
-    console.log("[planner] expand product-like shorthand as target recipient search, raw:", t.slice(0, 80));
-    return [
-      "Target recipient search: find real businesses and commercial sites (e.g. cafés, coffee shops, restaurants, hospitality, retail) that may need or buy the following, and their contact or partnership points:",
-      `"${t}".`,
-      "Prioritize cafe, restaurant, coffee shop, and operator or venue websites, plus contact / advertising / partnership / sponsor discovery.",
-      "Do not lean on generic K-12, government education offices, or compliance training sites unless clearly relevant. Original user text (save context):",
-      t,
-    ].join(" ");
-  }
-  return t;
+function cleanJsonFence(text: string): string {
+  return text.replace(/```json\n?/gi, "").replace(/```/g, "").trim();
 }
 
 /** One representative email per site: prefer business-facing roles over generic. */
@@ -156,46 +144,34 @@ function hostOfLink(link: string | undefined): string | null {
   return host || null;
 }
 
-function fallbackTargetQueries(cleaned: string): string[] {
-  const t = (cleaned || "media partners").toLowerCase();
-  const out = [
-    `${t} blog contact email`,
-    `${t} newsletter contact advertising`,
-    `${t} website partnership US`,
-    `${t} community contact`,
-    `${t} advertising sponsor contact`,
-    `${t} write for us blog`,
-    `${t} media contact partnership`,
-    `${t} company contact email`,
-  ];
-  return [...new Set(out.map((q) => q.replace(/\s+/g, " ").trim()))].filter((q) => q.length > 8);
-}
-
-function parseQueryPlannerJson(text: string): string[] {
-  const t = text.trim();
-  const jsonMatch = t.match(/\{[\s\S]*"search_queries"[\s\S]*\}/);
-  const raw = jsonMatch ? jsonMatch[0] : t;
+function parsePlannerOutput(text: string): { queries: string[]; competitorKeywords: string[] } {
+  const raw = cleanJsonFence(text);
+  let queries: string[] = [];
+  let competitorKeywords: string[] = [];
   try {
-    const parsed = JSON.parse(raw) as { search_queries?: unknown };
-    const ar = parsed.search_queries;
-    if (Array.isArray(ar)) {
-      return ar
+    const parsed = JSON.parse(raw) as { queries?: unknown; competitor_keywords?: unknown };
+    if (Array.isArray(parsed.queries)) {
+      queries = parsed.queries
         .map((q) => (typeof q === "string" ? stripLineNoise(q) : ""))
-        .filter((q) => q.length > 4 && q.length < 200);
+        .filter((q) => q.length > 5 && q.length < 200)
+        .slice(0, 2);
+    }
+    if (Array.isArray(parsed.competitor_keywords)) {
+      competitorKeywords = parsed.competitor_keywords
+        .map((q) => (typeof q === "string" ? q.trim().toLowerCase() : ""))
+        .filter((q) => q.length > 1 && q.length < 80);
     }
   } catch {
-    // ignore
+    // ignore parse failure
   }
-  return [];
+  return { queries, competitorKeywords };
 }
 
-async function buildTargetSearchQueriesFromGpt(targetDescription: string, cleaned: string): Promise<string[]> {
-  const fallbackBlock = fallbackTargetQueries(cleaned);
+async function buildBuyerQueriesAndCompetitorsFromGpt(cleaned: string): Promise<{ queries: string[]; competitorKeywords: string[] }> {
+  let queries: string[] = [];
+  let competitorKeywords: string[] = [];
   const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) {
-    console.log("[search-prospects] No OPENAI_API_KEY, using fallback target queries", fallbackBlock.length, "q");
-    return fallbackBlock;
-  }
+  if (!openaiKey) return { queries: [`businesses that need ${cleaned} contact email`], competitorKeywords: [] };
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GPT_TIMEOUT_MS);
@@ -209,11 +185,11 @@ async function buildTargetSearchQueriesFromGpt(targetDescription: string, cleane
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 1800,
+        max_tokens: 200,
         temperature: 0,
         messages: [
-          { role: "system", content: TARGET_QUERY_PLANNER_SYSTEM },
-          { role: "user", content: targetDescription },
+          { role: "system", content: SELLER_TO_BUYER_SYSTEM_PROMPT },
+          { role: "user", content: cleaned },
         ],
       }),
       signal: controller.signal,
@@ -221,42 +197,27 @@ async function buildTargetSearchQueriesFromGpt(targetDescription: string, cleane
 
     if (!response.ok) {
       console.warn("[search-prospects] OpenAI HTTP", response.status);
-      return fallbackBlock;
+      return { queries: [`businesses that need ${cleaned} contact email`], competitorKeywords: [] };
     }
 
     const gptData = (await response.json()) as { choices?: { message?: { content?: string } }[] };
     const gptText = gptData.choices?.[0]?.message?.content?.trim();
-    let queries = parseQueryPlannerJson(typeof gptText === "string" ? gptText : "");
-    const seenQ = new Set<string>();
-    queries = queries
-      .filter((q) => {
-        const k = q.toLowerCase();
-        if (seenQ.has(k)) return false;
-        seenQ.add(k);
-        return true;
-      })
-      .slice(0, 12);
-
-    if (queries.length < 8) {
-      for (const f of fallbackBlock) {
-        if (queries.length >= 12) break;
-        if (!seenQ.has(f.toLowerCase())) {
-          seenQ.add(f.toLowerCase());
-          queries.push(f);
-        }
-      }
+    if (gptText) {
+      const parsed = parsePlannerOutput(gptText);
+      queries = parsed.queries;
+      competitorKeywords = parsed.competitorKeywords;
+      console.log(`[GPT 성공] 쿼리: ${queries.join(" | ")} 경쟁사: ${competitorKeywords.join(", ")}`);
     }
-    if (queries.length < 5) {
-      return fallbackBlock;
-    }
-    console.log(`[planner] ${queries.length} search queries for Serper:`, JSON.stringify(queries));
-    return queries;
   } catch (e) {
-    console.log("[search-prospects] Target query planner failed, fallback:", e instanceof Error ? e.message : e);
-    return fallbackBlock;
+    console.log(`[GPT 실패] ${e instanceof Error ? e.message : String(e)}`);
   } finally {
     clearTimeout(timer);
   }
+
+  if (queries.length === 0) {
+    queries = [`businesses that need ${cleaned} contact email`];
+  }
+  return { queries, competitorKeywords };
 }
 
 function isBlockedHost(hostname: string) {
@@ -297,49 +258,39 @@ function deprioritizeKnownHostSerpItems(organic: SerperOrganicResult[], knownHos
   return [...a, ...b];
 }
 
-async function loadExistingEmailContext(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string
-): Promise<{ existingEmails: Set<string>; knownHostnames: Set<string> }> {
+async function loadExistingEmails(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<Set<string>> {
   const existingEmails = new Set<string>();
-  const knownHostnames = new Set<string>();
   try {
-    const { data: rows, error } = await supabase
+    const direct = await supabase
       .from("extracted_leads")
-      .select("emails, source_url")
-      .eq("user_id", userId)
-      .limit(3000);
-    if (error) throw error;
-    for (const row of rows ?? []) {
-      if (row.source_url && typeof row.source_url === "string") {
-        const h = hostOfLink(row.source_url);
-        if (h) knownHostnames.add(h);
+      .select("email")
+      .eq("user_id", userId);
+    if (!direct.error && Array.isArray(direct.data)) {
+      for (const row of direct.data as Array<{ email?: string | null }>) {
+        const e = row.email?.toLowerCase();
+        if (e) existingEmails.add(e);
       }
-      const raw = (row as { emails?: unknown }).emails;
-      if (!raw || !Array.isArray(raw)) continue;
-      for (const e of raw) {
-        if (e && typeof e === "object" && "email" in e) {
-          const em = (e as { email?: string }).email;
-          if (typeof em === "string" && em.includes("@")) {
-            const lower = em.toLowerCase();
-            existingEmails.add(lower);
-            const at = lower.lastIndexOf("@");
-            if (at > 0) {
-              const dom = lower.slice(at + 1).replace(/^www\./, "");
-              if (dom) knownHostnames.add(dom);
-            }
-          }
+    } else {
+      const fallback = await supabase
+        .from("extracted_leads")
+        .select("emails")
+        .eq("user_id", userId)
+        .limit(3000);
+      if (fallback.error) throw fallback.error;
+      for (const row of (fallback.data ?? []) as Array<{ emails?: unknown }>) {
+        const arr = row.emails;
+        if (!Array.isArray(arr)) continue;
+        for (const item of arr) {
+          const em = typeof item === "object" && item && "email" in item ? (item as { email?: string }).email : undefined;
+          if (em) existingEmails.add(em.toLowerCase());
         }
       }
     }
-    console.log(`[중복 체크] 기존 이메일 ${existingEmails.size}개, 알려진 호스트/도메인 ${knownHostnames.size}개 로드`);
+    console.log(`[중복 체크] 기존 이메일 ${existingEmails.size}개`);
   } catch (err) {
-    console.log(
-      "[중복 체크 실패, 무시하고 진행]",
-      err instanceof Error ? err.message : String(err)
-    );
+    console.log(`[중복 체크 실패, 무시] ${err instanceof Error ? err.message : String(err)}`);
   }
-  return { existingEmails, knownHostnames };
+  return existingEmails;
 }
 
 type OkExtraction = {
@@ -430,17 +381,17 @@ export async function POST(request: NextRequest) {
 
     const keyword = query.trim();
     const cleaned = stripSellPrefixes(keyword) || keyword;
-    const plannerInput = plannerUserMessageForGpt(keyword);
-    const queries = await buildTargetSearchQueriesFromGpt(plannerInput, cleaned);
-    console.log("[planner] generated search_queries count", queries.length);
+    const planner = await buildBuyerQueriesAndCompetitorsFromGpt(cleaned);
+    const queries = planner.queries.slice(0, 2);
+    let competitorKeywords = planner.competitorKeywords;
+    const words = cleaned.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    competitorKeywords = Array.from(new Set([...competitorKeywords, ...words]));
 
-    const { existingEmails, knownHostnames: dbKnownHosts } = await loadExistingEmailContext(supabase, user.id);
-    // Session-level tracking (clone so we can mutate for same-run dedupe)
+    const existingEmails = await loadExistingEmails(supabase, user.id);
     const emailSeen = new Set<string>(existingEmails);
-    const hostSession = new Set<string>(dbKnownHosts);
 
-    // ── Serper: parallel (num=10 each) ──
-    const serperPromises = queries.map((q) =>
+    // ── Serper: 2회 병렬 ──
+    const serperPromises = queries.slice(0, 2).map((q) =>
       fetch(SERPER_ENDPOINT, {
         method: "POST",
         headers: {
@@ -450,7 +401,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({ q, num: SERPER_NUM_RESULTS }),
         signal: AbortSignal.timeout(3000),
       })
-        .then(async (r) => (r.ok ? (await r.json().catch(() => ({})) as SerperResponse) : ({} as SerperResponse)))
+        .then(async (r) => (r.ok ? (await r.json().catch(() => ({ organic: [] })) as SerperResponse) : ({ organic: [] } as SerperResponse)))
         .catch(() => ({} as SerperResponse))
     );
 
@@ -477,12 +428,16 @@ export async function POST(request: NextRequest) {
       }
       if (allOrganic.length >= MAX_SERPER_URLS) break;
     }
-    console.log(`[Serper] 쿼리 ${queries.length}개 → 합산 ${allOrganic.length}개 (도메인 중복 제거)`);
-    // Target-based search: do not use keyword-competitor strip on results (it removes relevant matches).
-    const candidates = allOrganic;
+    console.log(`[Serper] 합산 ${allOrganic.length}개 (도메인 중복 제거)`);
 
-    const blocklisted = dedupeBlocklistOrganic(candidates);
-    const ordered = deprioritizeKnownHostSerpItems(blocklisted, dbKnownHosts);
+    const filtered = allOrganic.filter((result) => {
+      const titleAndLink = `${result.title || ""} ${result.link || ""}`.toLowerCase();
+      return !competitorKeywords.some((kw) => titleAndLink.includes(kw));
+    });
+    const candidates = filtered.length > 0 ? filtered : allOrganic;
+    console.log(`[필터] ${allOrganic.length}개 → ${candidates.length}개`);
+
+    const ordered = dedupeBlocklistOrganic(candidates);
     const candidateUrls: string[] = [];
     for (const it of ordered) {
       const link = it.link;
@@ -505,6 +460,7 @@ export async function POST(request: NextRequest) {
     const failures: { url: string; reason: string }[] = [];
     let candidateIndex = 0;
     let batchN = 0;
+    let skippedDups = 0;
 
     while (
       newResultRows.length < targetCount &&
@@ -534,32 +490,27 @@ export async function POST(request: NextRequest) {
         if (newRows.length === 0 && dupRows.length === 0) {
           failures.push({ url, reason: "No email found" });
         }
-        for (const r of dupRows) {
-          dupResultRows.push(r);
-        }
+        skippedDups += dupRows.length;
+        dupResultRows.push(...dupRows);
         for (const r of newRows) {
           if (newResultRows.length >= targetCount) break;
           const el = r.email.toLowerCase();
-          const h = (r.host || "").toLowerCase();
-          if (h && hostSession.has(h)) {
-            dupResultRows.push(r);
-            continue;
-          }
           if (emailSeen.has(el)) {
             dupResultRows.push(r);
+            skippedDups += 1;
             continue;
           }
-          if (h) hostSession.add(h);
           emailSeen.add(el);
           newResultRows.push(r);
+          console.log(`[새 이메일] ${r.email}`);
         }
       }
       console.log(
-        `[배치 ${batchN}] 새: ${newResultRows.length}/${targetCount}, 중복: ${dupResultRows.length}, index: ${candidateIndex}/${candidateUrls.length}`
+        `[배치] 새: ${newResultRows.length}/${targetCount} 중복: ${skippedDups} 후보남음: ${candidateUrls.length - candidateIndex}`
       );
     }
 
-    const duplicatesSkipped = dupResultRows.length;
+    const duplicatesSkipped = skippedDups;
     const crawlElapsed = Date.now() - crawlStart;
     console.log(
       "[search-prospects] Crawl done — new:",
@@ -630,27 +581,16 @@ export async function POST(request: NextRequest) {
       candidateUrlsTotal: candidateUrls.length,
       creditsUsed,
       creditsRefunded,
-      plannerQueryCount: queries.length,
     };
 
-    const dupPart =
-      stats.duplicatesSkipped > 0
-        ? ` (${stats.duplicatesSkipped} duplicate${stats.duplicatesSkipped === 1 ? "" : "s"} skipped)`
-        : "";
-    const refundWord = stats.creditsRefunded === 1 ? "credit" : "credits";
-    const usedWord = stats.creditsUsed === 1 ? "credit" : "credits";
-
     let message: string;
-    if (stats.creditsUsed > 0) {
-      message =
-        stats.creditsRefunded > 0
-          ? `✓ Found ${stats.creditsUsed} new email${stats.creditsUsed === 1 ? "" : "s"}${dupPart} — ${stats.creditsUsed} ${usedWord} used, ${stats.creditsRefunded} ${refundWord} refunded`
-          : `✓ Found ${stats.creditsUsed} new email${stats.creditsUsed === 1 ? "" : "s"}${dupPart} — ${stats.creditsUsed} ${usedWord} used`;
-    } else if (stats.duplicatesSkipped > 0) {
-      const credWord = reservedCredits === 1 ? "credit" : "credits";
-      message = `No new emails found${dupPart} — all ${reservedCredits} ${credWord} refunded.`;
+    if (creditsUsed === targetCount) {
+      message = `✓ Found ${creditsUsed} emails — ${creditsUsed} credits used`;
+    } else if (creditsUsed > 0) {
+      const dupPart = duplicatesSkipped > 0 ? ` (${duplicatesSkipped} duplicates skipped)` : "";
+      message = `✓ Found ${creditsUsed} new emails${dupPart} — ${creditsUsed} credits used, ${creditsRefunded} credits refunded`;
     } else {
-      message = `No emails found — all ${reservedCredits} credits refunded. Try different keywords.`;
+      message = `No emails found — all ${targetCount} credits refunded. Try different keywords.`;
     }
 
     console.log("[search-prospects] === DONE === used:", creditsUsed, "refunded:", creditsRefunded, "elapsed:", Date.now() - startTime, "ms");
