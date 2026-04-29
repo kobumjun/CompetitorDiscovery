@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, CreditCard, ExternalLink, HelpCircle, Rocket, Sparkles } from "lucide-react";
+import { Check, CreditCard, ExternalLink, HelpCircle, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { PLANS, planIncludedCredits, type User } from "@/types";
@@ -92,19 +92,7 @@ export default function PricingClientPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <nav className="border-b border-surface-200 bg-white">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <Rocket className="h-6 w-6 text-brand-500" strokeWidth={2.5} />
-            <span className="text-lg font-bold text-ink-900">ProposalPilot</span>
-          </Link>
-          <Link href="/dashboard/settings" className="btn-ghost text-sm">
-            Settings
-          </Link>
-        </div>
-      </nav>
-
+    <div className="bg-white">
       <section className="py-14 text-center md:py-16">
         <div className="mx-auto max-w-3xl px-6">
           <h1 className="mb-3 text-display-lg font-black text-ink-900">Choose Your Plan</h1>
