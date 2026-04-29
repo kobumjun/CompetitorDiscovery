@@ -5,9 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  FileText,
-  Target,
-  Users,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,9 +16,6 @@ const NAV_ITEMS: {
   exact: boolean;
 }[] = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Home", exact: true },
-  { href: "/dashboard/proposals", icon: FileText, label: "Proposals", exact: false },
-  { href: "/dashboard/find-contacts", icon: Target, label: "Contacts", exact: false },
-  { href: "/dashboard/clients", icon: Users, label: "Clients", exact: false },
   { href: "/dashboard/settings", icon: Settings, label: "Settings", exact: false },
 ];
 

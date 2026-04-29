@@ -197,6 +197,18 @@ export default function DashboardPage() {
     });
   }
 
+  function openComposerForRow(rowKey: string) {
+    setRowComposers((prev) => {
+      const next: Record<string, RowComposerState> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        next[k] = { ...v, open: false };
+      }
+      const current = prev[rowKey] ?? defaultComposer();
+      next[rowKey] = { ...current, open: true };
+      return next;
+    });
+  }
+
   async function handleFindProspects() {
     const selectedTarget = query.trim();
     if (!selectedTarget) return;
@@ -266,6 +278,8 @@ export default function DashboardPage() {
           type: composer.outreachType,
           context: composer.context,
           recipientEmails: [row.email],
+          keyword: query.trim(),
+          companyName: row.company_name,
         }),
       });
       const payload = await res.json();
@@ -425,9 +439,7 @@ export default function DashboardPage() {
                     ? `✓ Found ${prospectResult.creditsUsed} of ${prospectResult.creditsReserved} emails — ${prospectResult.creditsUsed} credits used, ${prospectResult.creditsRefunded} credits refunded`
                     : `✓ Found ${prospectResult.creditsUsed} emails — ${prospectResult.creditsUsed} credits used`}
             </p>
-            <Link href="/dashboard/find-contacts" className="text-sm font-medium text-brand-600 hover:text-brand-700">
-              View all in Find Contacts →
-            </Link>
+            <span className="text-xs text-ink-500">Step 2: click Write on a row below</span>
           </div>
 
           <div className="mt-4 overflow-x-auto">
@@ -455,28 +467,15 @@ export default function DashboardPage() {
                           </a>
                         </td>
                         <td className="py-2">
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              className="inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
-                              onClick={() => updateComposer(key, (prev) => ({ ...prev, open: !prev.open }))}
-                            >
-                              {composer.open ? "Close" : "Write Email"}
-                            </button>
-                            <button
-                              className="p-1.5 rounded-md text-ink-500 hover:bg-surface-100 hover:text-ink-700"
-                              onClick={() => void navigator.clipboard.writeText(row.email)}
-                              title="Copy Email"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                            <a
-                              href={`mailto:${row.email}`}
-                              className="p-1.5 rounded-md text-ink-500 hover:bg-surface-100 hover:text-ink-700"
-                              title="Open in Mail"
-                            >
-                              <Mail className="w-4 h-4" />
-                            </a>
-                          </div>
+                          <button
+                            className="inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
+                            onClick={() => {
+                              if (composer.open) updateComposer(key, (prev) => ({ ...prev, open: false }));
+                              else openComposerForRow(key);
+                            }}
+                          >
+                            {composer.open ? "Close" : "Write →"}
+                          </button>
                         </td>
                       </tr>
                       <tr className="border-b border-surface-100">
@@ -484,83 +483,35 @@ export default function DashboardPage() {
                           <div className={cn("overflow-hidden transition-all duration-300 ease-out", composer.open ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0")}>
                             <div className="bg-orange-50/30 border-l-2 border-orange-400 px-4 py-4 sm:px-5 sm:py-5">
                               <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
-                                <div className="text-sm font-medium text-ink-800">Choose email type:</div>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                  {OUTREACH_TYPES.map((item) => (
-                                    <button
-                                      key={item.key}
-                                      type="button"
-                                      onClick={() => updateComposer(key, (prev) => ({ ...prev, outreachType: item.key }))}
-                                      className={cn("btn-secondary text-xs justify-center", composer.outreachType === item.key && "bg-brand-50 border-brand-300 text-brand-700")}
-                                    >
-                                      {item.label}
-                                    </button>
-                                  ))}
+                                <div className="text-sm text-ink-700">
+                                  <span className="font-medium">To:</span> {row.email}
                                 </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => updateComposer(key, (prev) => ({ ...prev, writeMode: "manual" }))}
-                                    className={cn("btn-secondary justify-center", composer.writeMode === "manual" && "bg-brand-50 border-brand-300 text-brand-700")}
-                                  >
-                                    ✍️ Write manually (free)
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => updateComposer(key, (prev) => ({ ...prev, writeMode: "ai" }))}
-                                    className={cn("btn-secondary justify-center", composer.writeMode === "ai" && "bg-brand-50 border-brand-300 text-brand-700")}
-                                  >
-                                    ✨ Generate with AI (1 credit)
-                                  </button>
-                                </div>
-
-                                {composer.writeMode === "ai" && (
-                                  <div className="space-y-2">
-                                    <textarea
-                                      className="input-field min-h-24"
-                                      value={composer.context}
-                                      onChange={(e) => updateComposer(key, (prev) => ({ ...prev, context: e.target.value }))}
-                                      placeholder="Specific context for this outreach..."
-                                    />
-                                    <button className="btn-primary" onClick={() => handleGenerateAi(row)} disabled={composer.generating}>
-                                      <Sparkles className="w-4 h-4" />
-                                      {composer.generating ? "Generating..." : "Generate Email with AI (1 credit)"}
-                                    </button>
-                                  </div>
-                                )}
-
                                 <input
                                   className="input-field"
                                   value={composer.subject}
                                   onChange={(e) => updateComposer(key, (prev) => ({ ...prev, subject: e.target.value }))}
-                                  placeholder="Email subject line"
+                                  placeholder="Subject"
                                 />
                                 <textarea
                                   className="input-field min-h-36"
                                   value={composer.body}
                                   onChange={(e) => updateComposer(key, (prev) => ({ ...prev, body: e.target.value }))}
-                                  placeholder="Write your email here..."
+                                  placeholder="Body"
                                 />
-                                {composer.subject && composer.body && (
-                                  <div className="rounded-xl border border-surface-200 bg-white shadow-sm">
-                                    <div className="px-4 py-3 border-b border-surface-200">
-                                      <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Subject</p>
-                                      <p className="text-sm font-semibold text-ink-900 mt-1 break-words">{composer.subject}</p>
-                                    </div>
-                                    <div className="px-4 py-3 max-h-60 overflow-y-auto">
-                                      <p className="text-sm text-ink-700 whitespace-pre-wrap leading-relaxed">{composer.body}</p>
-                                    </div>
-                                  </div>
-                                )}
-                                <button
-                                  className="btn-primary"
-                                  onClick={() => openInMail(row)}
-                                  disabled={!composer.subject.trim() || !composer.body.trim()}
-                                >
-                                  <Mail className="w-4 h-4" />
-                                  Open in Mail
-                                </button>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <button className="btn-secondary" onClick={() => handleGenerateAi(row)} disabled={composer.generating}>
+                                    <Sparkles className="w-4 h-4" />
+                                    {composer.generating ? "Writing..." : "AI Generate"}
+                                  </button>
+                                  <button
+                                    className="btn-primary"
+                                    onClick={() => openInMail(row)}
+                                    disabled={!composer.subject.trim() || !composer.body.trim()}
+                                  >
+                                    <Mail className="w-4 h-4" />
+                                    Send Email
+                                  </button>
+                                </div>
                                 {composer.error && <p className="text-sm text-red-600">{composer.error}</p>}
                                 {composer.notice && <p className="text-sm text-emerald-700">{composer.notice}</p>}
                               </div>
