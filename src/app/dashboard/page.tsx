@@ -495,7 +495,17 @@ export default function DashboardPage() {
       )}
 
       {credits !== null && (
-        <div className={cn("card p-4 mb-8", credits === 0 ? "border-red-200 bg-red-50" : credits <= 3 ? "border-amber-200 bg-amber-50" : "")}>
+        <Link
+          href="/pricing"
+          className={cn(
+            "card mb-8 block p-4 transition-colors",
+            credits === 0
+              ? "border-red-200 bg-red-50 hover:bg-red-100/70"
+              : credits <= 3
+                ? "border-amber-200 bg-amber-50 hover:bg-amber-100/70"
+                : "hover:bg-surface-50"
+          )}
+        >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3 sm:items-center">
               <Sparkles className={cn("w-5 h-5 flex-shrink-0", credits === 0 ? "text-red-500" : credits <= 3 ? "text-amber-500" : "text-brand-500")} />
@@ -510,12 +520,12 @@ export default function DashboardPage() {
                 )}
               </span>
             </div>
-            <Link href="/pricing" className={cn("flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-center text-sm font-semibold transition-colors sm:ml-4 sm:w-auto sm:justify-center", credits <= 3 ? "bg-brand-500 text-white hover:bg-brand-600" : "text-brand-600 hover:text-brand-700 hover:bg-brand-50")}>
+            <span className={cn("flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-center text-sm font-semibold transition-colors sm:ml-4 sm:w-auto sm:justify-center", credits <= 3 ? "bg-brand-500 text-white" : "text-brand-600 bg-brand-50/60")}>
               Upgrade Plan
               <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            </span>
           </div>
-        </div>
+        </Link>
       )}
 
       {loading && (

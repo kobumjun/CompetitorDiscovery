@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   Rocket,
   LayoutDashboard,
+  Sparkles,
   Settings,
   LogOut,
   CreditCard,
@@ -19,6 +20,7 @@ import { useDashboardCredits } from "@/lib/use-dashboard-credits";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
+  { href: "/pricing", icon: Sparkles, label: "Pricing", exact: true, highlight: true },
   { href: "/dashboard/settings", icon: Settings, label: "Settings", exact: false },
 ];
 
@@ -62,10 +64,12 @@ export function DashboardSidebar({ user }: { user: User }) {
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                 active
                   ? "bg-brand-50 text-brand-700 border-l-2 border-brand-500 ml-0 pl-[10px]"
-                  : "text-ink-500 hover:text-ink-700 hover:bg-surface-100"
+                  : item.highlight
+                    ? "text-brand-600 hover:text-brand-700 hover:bg-brand-50/60"
+                    : "text-ink-500 hover:text-ink-700 hover:bg-surface-100"
               )}
             >
-              <item.icon className={cn("w-[18px] h-[18px]", active ? "text-brand-600" : "")} />
+              <item.icon className={cn("w-[18px] h-[18px]", active || item.highlight ? "text-brand-600" : "")} />
               {item.label}
             </Link>
           );
