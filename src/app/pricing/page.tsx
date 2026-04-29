@@ -75,10 +75,10 @@ export default function PricingPage() {
               </div>
               <ul className="space-y-3 mb-8 flex-1">
                 {[
-                  "5 AI-powered emails",
-                  "Keyword search to find prospects",
-                  "Email extraction",
-                  "View tracking",
+                  "5 credits",
+                  "AI-powered customer discovery",
+                  "AI email writing",
+                  "Email sending via mailto",
                 ].map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
                     <Check className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />{f}
@@ -110,21 +110,16 @@ export default function PricingPage() {
                   {(plan.type === "pro"
                     ? [
                         "150 credits / month",
-                        "Keyword prospect search",
-                        "Bulk URL extraction (up to 20)",
-                        "AI pitch generation (GPT-4o)",
-                        "Unlimited clients",
-                        "Shareable proposal links",
-                        "View & engagement tracking",
-                        "PDF export",
-                        "Custom branding",
+                        "AI-powered customer discovery",
+                        "AI email writing",
+                        "Email sending via mailto",
+                        "Bulk URL extraction",
+                        "Priority support",
                       ]
                     : [
-                        "500 credits / month",
+                        "500 credits per month",
                         "Everything in Pro",
-                        "Priority AI generation",
-                        "Custom templates library",
-                        "Bulk prospect management",
+                        "Higher volume searches",
                         "Priority support",
                       ]).map((f) => (
                     <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
@@ -144,9 +139,9 @@ export default function PricingPage() {
           <h2 className="text-heading font-bold text-ink-900 mb-8">Included in every plan</h2>
           <div className="grid sm:grid-cols-3 gap-6">
             {[
-              { icon: Zap, title: "AI Generation (GPT-4o)", desc: "Personalized outreach emails in seconds" },
-              { icon: Shield, title: "Electronic Signatures", desc: "Clients sign directly online" },
-              { icon: RefreshCcw, title: "Full Edit Control", desc: "Edit every email before sending" },
+              { icon: Zap, title: "AI customer discovery", desc: "Find ideal customer emails quickly" },
+              { icon: Shield, title: "AI email writing", desc: "Generate personalized outreach in seconds" },
+              { icon: RefreshCcw, title: "Email sending via mailto", desc: "Edit and send with your default email app" },
             ].map((item) => (
               <div key={item.title} className="text-center">
                 <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center mx-auto mb-3">

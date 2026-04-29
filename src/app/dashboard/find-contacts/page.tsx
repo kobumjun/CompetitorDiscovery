@@ -1,3 +1,5 @@
-import LeadsPage from "../leads/page";
+import { redirect } from "next/navigation";
 
-export default LeadsPage;
+export default function FindContactsPage() {
+  redirect("/dashboard");
+}

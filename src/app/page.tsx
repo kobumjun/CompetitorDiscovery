@@ -6,15 +6,9 @@ import {
   Rocket,
   ArrowRight,
   Sparkles,
-  FileText,
-  PenTool,
-  Eye,
   Send,
   Check,
-  Users,
   Zap,
-  BarChart3,
-  Shield,
 } from "lucide-react";
 import { PLANS } from "@/types";
 import { PlanCheckoutButton } from "@/components/plan-checkout-button";
@@ -73,12 +67,10 @@ export default function LandingPage() {
             Outreach on autopilot
           </div>
           <h1 className="mb-6 font-black text-ink-900 [font-size:clamp(2.5rem,9vw,3.25rem)] leading-[1.13] tracking-[-0.025em] [word-break:keep-all] [overflow-wrap:break-word] [hyphens:none] px-4 sm:px-0 max-[480px]:[font-size:clamp(2.25rem,8.5vw,2.75rem)] max-[480px]:leading-[1.1] md:text-display-xl md:leading-tight">
-            Describe who you want to reach.
-            <span className="block md:inline"> We find them, get their email, and write your pitch.</span>
+            Find your first leads in 10 seconds
           </h1>
           <p className="text-lg md:text-xl text-ink-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Type a keyword like &ldquo;marketing agencies in London&rdquo; — ProposalPilot finds companies,
-            extracts contact emails, and generates a personalized pitch with AI. Ready to send in 60 seconds.
+            Tell us what you sell — we&apos;ll find real customer emails instantly.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
             <button type="button" onClick={startGoogleAuth} className="btn-primary text-base px-8 py-3">
@@ -107,9 +99,9 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-2 max-[480px]:grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
             {[
-              { icon: FileText, value: "20", label: "URLs per bulk run" },
-              { icon: Users, value: "1 credit", label: "Per email found" },
-              { icon: BarChart3, value: "1 page", label: "Manage all extracted leads" },
+              { icon: Sparkles, value: "20", label: "URLs per bulk run" },
+              { icon: Zap, value: "1 credit", label: "Per email found" },
+              { icon: Send, value: "1 page", label: "Manage all outreach in one place" },
             ].map((stat) => (
               <div key={stat.label} className="flex flex-col items-center text-center gap-2">
                 <stat.icon className="w-4 h-4 text-brand-500" />
@@ -136,21 +128,21 @@ export default function LandingPage() {
             {[
               {
                 step: "01",
-                icon: PenTool,
-                title: "Describe your target",
-                desc: "Type keywords like 'SaaS startups' or 'yoga studios in NYC'. Or paste URLs directly if you already have a list.",
+                icon: Sparkles,
+                title: "Describe what you sell",
+                desc: "Just type your product or service — like 'coffee machines' or 'web design'.",
               },
               {
                 step: "02",
-                icon: Sparkles,
-                title: "We find companies & extract emails",
-                desc: "ProposalPilot searches the web, finds matching companies, and extracts their contact emails automatically.",
+                icon: Zap,
+                title: "We find your ideal customers",
+                desc: "AI identifies businesses that would buy from you and extracts their contact emails.",
               },
               {
                 step: "03",
                 icon: Send,
-                title: "AI writes your pitch, you hit send",
-                desc: "Choose your outreach type — proposal, sales pitch, investment ask, or quote. AI writes a personalized email based on what the company actually does. Your mail app opens ready to go.",
+                title: "Send personalized emails",
+                desc: "Write and send outreach emails directly — AI helps you draft them.",
               },
             ].map((item) => (
               <div key={item.step} className="relative">
@@ -168,84 +160,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Example Output Preview */}
-      <section className="py-20 md:py-28 bg-ink-900 text-white relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-ink-900 via-ink-800 to-ink-900" />
-        <div className="relative max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-xs font-semibold uppercase tracking-wider text-brand-400 mb-3">
-              Example Output
-            </p>
-            <h2 className="text-display font-bold text-white mb-3">
-              What AI generates for you
-            </h2>
-            <p className="text-ink-400 max-w-xl mx-auto">
-              A real proposal structure generated from a simple project description
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-white/80 mb-4">📝 Cover Letter</h3>
-              <p className="text-sm text-white/60 leading-relaxed">
-                &ldquo;Dear Sarah, thank you for considering us for the Acme Corp website redesign.
-                With 8 years of experience in modern web design, we are excited to transform
-                your digital presence into a conversion-focused experience...&rdquo;
-              </p>
-            </div>
-
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-white/80 mb-4">📋 Scope & Deliverables</h3>
-              <div className="space-y-2">
-                {["Discovery & Research", "UI/UX Design", "Development & QA", "Launch & Handoff"].map((s) => (
-                  <div key={s} className="flex items-center gap-2 text-sm text-white/60">
-                    <Check className="w-4 h-4 text-brand-400" /> {s}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-white/80 mb-4">💰 Pricing Table</h3>
-              <div className="space-y-2">
-                {[
-                  { item: "Discovery & Research", amount: "$1,200" },
-                  { item: "UI/UX Design", amount: "$2,800" },
-                  { item: "Development", amount: "$3,500" },
-                  { item: "QA & Launch", amount: "$1,500" },
-                ].map((p) => (
-                  <div key={p.item} className="flex justify-between text-sm">
-                    <span className="text-white/60">{p.item}</span>
-                    <span className="text-white/80 font-medium">{p.amount}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between text-sm pt-2 border-t border-white/10">
-                  <span className="text-white font-bold">Total</span>
-                  <span className="text-brand-400 font-bold">$9,000</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-white/80 mb-4">📅 Timeline & Terms</h3>
-              <div className="space-y-3">
-                {[
-                  { phase: "Week 1-2", desc: "Discovery & Wireframes" },
-                  { phase: "Week 3-4", desc: "Visual Design" },
-                  { phase: "Week 5-7", desc: "Development" },
-                  { phase: "Week 8", desc: "QA & Launch" },
-                ].map((t) => (
-                  <div key={t.phase} className="flex gap-3 text-sm">
-                    <span className="text-brand-400 font-bold min-w-[70px]">{t.phase}</span>
-                    <span className="text-white/60">{t.desc}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Features */}
       <section id="features" className="py-20 md:py-28">
         <div className="max-w-5xl mx-auto px-6">
@@ -257,12 +171,9 @@ export default function LandingPage() {
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { icon: Users, title: "Solo founders", desc: "Reaching out to potential clients, partners, and investors directly." },
-              { icon: FileText, title: "Freelancers", desc: "Pitching new projects to companies you find online." },
-              { icon: Eye, title: "Link builders", desc: "Contacting site owners fast for SEO outreach." },
-              { icon: Send, title: "Manual outreach workflows", desc: "Perfect when you find a company first and want to message them now." },
-              { icon: Sparkles, title: "Personalized pitches", desc: "Generate messages based on what each company actually does." },
-              { icon: Shield, title: "Public contact data only", desc: "Extracts publicly listed emails with a clear outreach flow." },
+              { icon: Sparkles, title: "AI customer discovery", desc: "Find businesses likely to buy your service and extract contact emails automatically." },
+              { icon: Zap, title: "AI email writing", desc: "Generate personalized subject lines and email copy based on each company." },
+              { icon: Send, title: "One-click sending", desc: "Open your mail client with a ready-to-send outreach message instantly." },
             ].map((feature) => (
               <div key={feature.title} className="card p-6 group hover:shadow-card-hover transition-all">
                 <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center mb-4 group-hover:bg-brand-100 transition-colors">
@@ -302,11 +213,10 @@ export default function LandingPage() {
               </div>
               <ul className="space-y-3 mb-8 flex-1">
                 {[
-                  "5 AI-powered emails",
-                  "Keyword search to find prospects",
-                  "Email extraction",
-                  "Shareable links",
-                  "Basic view tracking",
+                  "5 credits",
+                  "AI-powered customer discovery",
+                  "AI email writing",
+                  "Email sending via mailto",
                 ].map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
                     <Check className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />{f}
@@ -340,7 +250,21 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <ul className="space-y-3 mb-8 flex-1">
-                  {plan.features.map((f) => (
+                  {(plan.type === "pro"
+                    ? [
+                        "150 credits per month",
+                        "AI-powered customer discovery",
+                        "AI email writing",
+                        "Email sending via mailto",
+                        "Bulk URL extraction",
+                        "Priority support",
+                      ]
+                    : [
+                        "500 credits per month",
+                        "Everything in Pro",
+                        "Higher volume searches",
+                        "Priority support",
+                      ]).map((f) => (
                     <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
                       <Check className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />{f}
                     </li>
