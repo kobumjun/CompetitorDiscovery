@@ -67,10 +67,10 @@ export default function LandingPage() {
             Outreach on autopilot
           </div>
           <h1 className="mb-6 font-black text-ink-900 [font-size:clamp(2.5rem,9vw,3.25rem)] leading-[1.13] tracking-[-0.025em] [word-break:keep-all] [overflow-wrap:break-word] [hyphens:none] px-4 sm:px-0 max-[480px]:[font-size:clamp(2.25rem,8.5vw,2.75rem)] max-[480px]:leading-[1.1] md:text-display-xl md:leading-tight">
-            Find your first leads in 10 seconds
+            Find your first leads and send emails in 10 seconds
           </h1>
           <p className="text-lg md:text-xl text-ink-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Tell us what you sell — we&apos;ll find real customer emails instantly.
+            Describe what you sell — we&apos;ll find real customer emails and help you send personalized pitches, all in one page.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
             <button type="button" onClick={startGoogleAuth} className="btn-primary text-base px-8 py-3">

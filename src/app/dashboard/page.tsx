@@ -280,22 +280,23 @@ export default function DashboardPage() {
 
       <section className={cn("mb-8 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white", hasCreatedAnything ? "p-5 sm:p-6" : "p-6 sm:p-8")}>
         <h2 className={cn("font-black text-ink-900", hasCreatedAnything ? "text-2xl sm:text-3xl" : "text-3xl sm:text-4xl")}>
-          Find your first leads in 10 seconds
+          What do you sell?
         </h2>
         <p className="mt-2 text-sm sm:text-base text-ink-600">
-          Describe what you sell — we&apos;ll find your ideal customers.
+          Describe your product or service — we&apos;ll find matching prospects instantly.
         </p>
         {credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything && (
           <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now</p>
         )}
-        <div className={cn("mt-3 flex flex-wrap gap-2", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-4")}>
+        <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Try an example:</p>
+        <div className={cn("mt-2 flex flex-wrap gap-2", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-3")}>
           {["coffee machines", "accounting services", "web design"].map((text, i) => (
             <button
               key={text}
               type="button"
               disabled={prospectLoading}
               className={cn(
-                "inline-flex items-center rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50",
+                "inline-flex cursor-pointer items-center rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50",
                 credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything
                   ? "bg-orange-100 border-orange-300 hover:bg-orange-200"
                   : "bg-orange-50 border-orange-200 hover:bg-orange-100"
@@ -316,6 +317,7 @@ export default function DashboardPage() {
           className={cn("input-field mt-2 h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
           placeholder="e.g. coffee machines, web design, accounting services"
           value={query}
+          autoFocus={leadCount === 0 && !prospectResult}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleFindProspects();
@@ -338,9 +340,16 @@ export default function DashboardPage() {
           Find {targetCount} Prospects & Emails
           <ArrowRight className="w-4 h-4 ml-1.5" />
         </button>
-        <p className="mt-2 text-xs text-ink-500">
-          Uses {targetCount} credit{targetCount !== 1 ? "s" : ""}. Unused credits refunded if fewer emails are found.
-        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <p className="text-ink-500">
+            Uses {targetCount} credit{targetCount !== 1 ? "s" : ""}. Unused credits refunded if fewer emails are found.
+          </p>
+          {credits !== null && (
+            <p className={cn(credits <= 3 ? "text-amber-700 font-medium" : "text-ink-600")}>
+              You have {credits} credit{credits !== 1 ? "s" : ""} remaining
+            </p>
+          )}
+        </div>
 
         <div className="mt-4 rounded-lg border border-surface-200 bg-white">
           <button
