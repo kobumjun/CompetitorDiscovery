@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/dashboard/", "/api/", "/proposals/", "/proposal/"],
+      disallow: ["/dashboard/", "/api/", "/proposal/"],
     },
     sitemap: "https://competitor-discovery-chi.vercel.app/sitemap.xml",
   };

@@ -8,7 +8,9 @@ import { createClient } from "@/lib/supabase/client";
 import { fireSignupConversion } from "@/lib/gtag";
 import {
   ArrowRight,
+  Check,
   ChevronDown,
+  Loader2,
   Mail,
   Search,
   Sparkles,
@@ -64,6 +66,8 @@ type RowComposerState = {
   generating: boolean;
   error: string | null;
   notice: string | null;
+  postSendSuccess: boolean;
+  sentToEmail: string | null;
 };
 
 function defaultComposer(): RowComposerState {
@@ -77,7 +81,34 @@ function defaultComposer(): RowComposerState {
     generating: false,
     error: null,
     notice: null,
+    postSendSuccess: false,
+    sentToEmail: null,
   };
+}
+
+async function fetchUsageStatsForModal(): Promise<{ prospects: number; sent: number }> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { prospects: 0, sent: 0 };
+
+  const [{ count: prospectCount }, { data: leadRows }] = await Promise.all([
+    supabase.from("extracted_leads").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("extracted_leads").select("id").eq("user_id", user.id),
+  ]);
+
+  const ids = (leadRows ?? []).map((r) => r.id as string);
+  let sentTotal = 0;
+  const batch = 200;
+  for (let i = 0; i < ids.length; i += batch) {
+    const slice = ids.slice(i, i + batch);
+    if (slice.length === 0) break;
+    const { count } = await supabase.from("outreaches").select("id", { count: "exact", head: true }).in("lead_id", slice);
+    sentTotal += count ?? 0;
+  }
+
+  return { prospects: prospectCount ?? 0, sent: sentTotal };
 }
 
 export default function DashboardPage() {
@@ -107,6 +138,13 @@ export default function DashboardPage() {
   const [prospectError, setProspectError] = useState<string | null>(null);
   const [prospectResult, setProspectResult] = useState<BulkPayload | null>(null);
   const [rowComposers, setRowComposers] = useState<Record<string, RowComposerState>>({});
+  const [writePulseRowKey, setWritePulseRowKey] = useState<string | null>(null);
+  const [sessionSentRowKeys, setSessionSentRowKeys] = useState<Record<string, boolean>>({});
+  const [creditsExhaustedModalOpen, setCreditsExhaustedModalOpen] = useState(false);
+  const [usageStatsForModal, setUsageStatsForModal] = useState<{ prospects: number; sent: number } | null>(null);
+  const searchSectionRef = useRef<HTMLDivElement>(null);
+  const queryInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     async function fetchData() {
       const supabase = createClient();
@@ -147,6 +185,15 @@ export default function DashboardPage() {
     return `${row.lead_id}:${row.email}`;
   }
 
+  useEffect(() => {
+    if (!prospectResult?.leads?.length) {
+      setWritePulseRowKey(null);
+      return;
+    }
+    const first = prospectResult.leads[0];
+    setWritePulseRowKey(`${first.lead_id}:${first.email}`);
+  }, [prospectResult]);
+
   function updateComposer(rowKey: string, updater: (prev: RowComposerState) => RowComposerState) {
     setRowComposers((prev) => {
       const current = prev[rowKey] ?? defaultComposer();
@@ -155,15 +202,61 @@ export default function DashboardPage() {
   }
 
   function openComposerForRow(rowKey: string) {
+    setWritePulseRowKey(null);
     setRowComposers((prev) => {
       const next: Record<string, RowComposerState> = {};
       for (const [k, v] of Object.entries(prev)) {
-        next[k] = { ...v, open: false };
+        next[k] = { ...v, open: false, postSendSuccess: false, sentToEmail: null };
       }
       const current = prev[rowKey] ?? defaultComposer();
-      next[rowKey] = { ...current, open: true };
+      next[rowKey] = {
+        ...current,
+        open: true,
+        postSendSuccess: false,
+        sentToEmail: null,
+        error: null,
+        notice: null,
+      };
       return next;
     });
+  }
+
+  function scrollToSearchAndFocus() {
+    searchSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => queryInputRef.current?.focus(), 400);
+  }
+
+  function openNextUnsentProspect(currentKey: string) {
+    if (!prospectResult?.leads.length) return;
+    const keys = prospectResult.leads.map((r) => rowKeyFor(r));
+    const idx = keys.indexOf(currentKey);
+    for (let i = idx + 1; i < keys.length; i++) {
+      const k = keys[i];
+      if (!sessionSentRowKeys[k]) {
+        openComposerForRow(k);
+        return;
+      }
+    }
+    scrollToSearchAndFocus();
+  }
+
+  async function openCreditsExhaustedModal() {
+    setCreditsExhaustedModalOpen(true);
+    setUsageStatsForModal(null);
+    try {
+      const stats = await fetchUsageStatsForModal();
+      setUsageStatsForModal(stats);
+    } catch {
+      setUsageStatsForModal({ prospects: leadCount, sent: 0 });
+    }
+  }
+
+  async function tryFindProspects() {
+    if (credits === 0) {
+      void openCreditsExhaustedModal();
+      return;
+    }
+    await handleFindProspects();
   }
 
   async function handleFindProspects() {
@@ -174,6 +267,7 @@ export default function DashboardPage() {
     setProspectError(null);
     setProspectResult(null);
     setRowComposers({});
+    setSessionSentRowKeys({});
     setProcessingCounter(0);
     setProgress("Searching for prospects...");
     const timerA = setTimeout(() => setProgress("Found companies. Extracting emails..."), 2000);
@@ -210,6 +304,14 @@ export default function DashboardPage() {
       if (typeof payload.creditsRemaining === "number") {
         setCredits(payload.creditsRemaining);
         void mutateGlobal(DASHBOARD_CREDITS_KEY, payload.creditsRemaining, false);
+      }
+      const supabase = createClient();
+      const {
+        data: { user: u },
+      } = await supabase.auth.getUser();
+      if (u) {
+        const { count } = await supabase.from("extracted_leads").select("id", { count: "exact", head: true }).eq("user_id", u.id);
+        setLeadCount(count ?? 0);
       }
     } catch {
       setProspectError("Search service unavailable. Please try again later.");
@@ -268,7 +370,13 @@ export default function DashboardPage() {
     const encodedSubject = encodeURIComponent(composer.subject.trim());
     const encodedBody = encodeURIComponent(withSignature(composer.body.trim()));
     window.location.href = `mailto:${encodeURIComponent(row.email)}?subject=${encodedSubject}&body=${encodedBody}`;
-    updateComposer(key, (prev) => ({ ...prev, notice: "Opened your default email client." }));
+    setSessionSentRowKeys((prev) => ({ ...prev, [key]: true }));
+    updateComposer(key, (prev) => ({
+      ...prev,
+      notice: null,
+      postSendSuccess: true,
+      sentToEmail: row.email,
+    }));
   }
 
   return (
@@ -278,63 +386,89 @@ export default function DashboardPage() {
         <p className="text-ink-500 mt-1">Your proposal command center</p>
       </div>
 
-      <section className={cn("mb-8 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white", hasCreatedAnything ? "p-5 sm:p-6" : "p-6 sm:p-8")}>
-        <h2 className={cn("font-black text-ink-900", hasCreatedAnything ? "text-2xl sm:text-3xl" : "text-3xl sm:text-4xl")}>
+      <section
+        ref={searchSectionRef}
+        className={cn(
+          "mb-8 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white",
+          hasCreatedAnything ? "p-3.5 sm:p-6" : "p-4 sm:p-8"
+        )}
+      >
+        <h2
+          className={cn(
+            "font-black text-ink-900",
+            hasCreatedAnything ? "text-xl sm:text-3xl" : "text-2xl sm:text-3xl md:text-4xl"
+          )}
+        >
           What do you sell?
         </h2>
-        <p className="mt-2 text-sm sm:text-base text-ink-600">
+        <p className="mt-1 text-sm sm:mt-2 sm:text-base text-ink-600">
           Describe your product or service — we&apos;ll find matching prospects instantly.
         </p>
         {credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything && (
-          <p className="mt-3 text-sm font-medium text-orange-700">👇 Click one to try it now</p>
+          <p className="mt-2 text-sm font-medium text-orange-700 sm:mt-3">👇 Click one to try it now</p>
         )}
-        <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Try an example:</p>
-        <div className={cn("mt-2 flex flex-wrap gap-2", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "mt-3")}>
+        <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-ink-500 sm:mt-3">Try an example:</p>
+        <div className={cn("mt-1.5 flex flex-wrap gap-1.5 sm:mt-2 sm:gap-2", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "sm:mt-3")}>
           {["coffee machines", "accounting services", "web design"].map((text, i) => (
             <button
               key={text}
               type="button"
               disabled={prospectLoading}
               className={cn(
-                "inline-flex cursor-pointer items-center rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50",
+                "inline-flex cursor-pointer items-center rounded-lg border px-2 py-1.5 text-left transition-colors disabled:opacity-50 sm:px-3 sm:py-2",
                 credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything
                   ? "bg-orange-100 border-orange-300 hover:bg-orange-200"
                   : "bg-orange-50 border-orange-200 hover:bg-orange-100"
               )}
               onClick={() => setQuery(text)}
             >
-              {i === 0 && <span className="mr-1 text-base leading-none">☕</span>}
-              {i === 1 && <span className="mr-1 text-base leading-none">📊</span>}
-              {i === 2 && <span className="mr-1 text-base leading-none">🎨</span>}
-              <span className={cn("text-xs sm:text-sm text-orange-700", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "font-medium" : "italic")}>
+              {i === 0 && <span className="mr-0.5 text-sm leading-none sm:mr-1 sm:text-base">☕</span>}
+              {i === 1 && <span className="mr-0.5 text-sm leading-none sm:mr-1 sm:text-base">📊</span>}
+              {i === 2 && <span className="mr-0.5 text-sm leading-none sm:mr-1 sm:text-base">🎨</span>}
+              <span
+                className={cn(
+                  "text-[11px] text-orange-700 sm:text-sm",
+                  credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "font-medium" : "italic"
+                )}
+              >
                 {text}
               </span>
             </button>
           ))}
         </div>
-        <label className="mt-4 block text-sm font-medium text-ink-700">What do you sell?</label>
+        <label className="mt-3 block text-sm font-medium text-ink-700 sm:mt-4">What do you sell?</label>
         <input
-          className={cn("input-field mt-2 h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
+          ref={queryInputRef}
+          className={cn("input-field mt-1.5 h-11 sm:mt-2 sm:h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
           placeholder="e.g. coffee machines, web design, accounting services"
           value={query}
           autoFocus={leadCount === 0 && !prospectResult}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") void handleFindProspects();
+            if (e.key === "Enter") void tryFindProspects();
           }}
         />
         {queryInputError && (
           <p className="mt-1.5 text-sm text-red-600">{queryInputError}</p>
         )}
-        <div className="mt-4">
+        <div className="mt-3 sm:mt-4">
           <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
           <EmailCountStepper value={targetCount} onChange={setTargetCount} maxCredits={credits} disabled={prospectLoading} />
         </div>
+        {credits !== null && credits > 0 && credits <= 2 && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 sm:mt-4">
+            <span className="font-medium">⚠️ You have {credits} credit{credits !== 1 ? "s" : ""} left.</span>{" "}
+            <Link href="/pricing" className="font-semibold text-brand-700 underline hover:text-brand-800">
+              Upgrade
+            </Link>{" "}
+            for unlimited prospecting.
+          </div>
+        )}
         <button
           type="button"
           className="mt-3 inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
-          onClick={() => void handleFindProspects()}
-          disabled={prospectLoading || !query.trim() || !!queryInputError || credits === 0 || (credits !== null && targetCount > credits)}
+          onClick={() => void tryFindProspects()}
+          disabled={prospectLoading || !query.trim() || !!queryInputError || (credits !== null && credits > 0 && targetCount > credits)}
         >
           <Search className="w-4 h-4 mr-1.5" />
           Find {targetCount} Prospects & Emails
@@ -394,19 +528,25 @@ export default function DashboardPage() {
       </section>
 
       {prospectResult && (
-        <section className="card p-4 mb-8">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-emerald-700 font-medium">
-              {prospectResult.message
-                ? prospectResult.message
-                : prospectResult.creditsUsed === 0
-                  ? `No emails found — all ${prospectResult.creditsReserved} credits refunded. Try different keywords.`
-                  : prospectResult.creditsRefunded > 0
-                    ? `✓ Found ${prospectResult.creditsUsed} of ${prospectResult.creditsReserved} emails — ${prospectResult.creditsUsed} credits used, ${prospectResult.creditsRefunded} credits refunded`
-                    : `✓ Found ${prospectResult.creditsUsed} emails — ${prospectResult.creditsUsed} credits used`}
-            </p>
-            <span className="text-xs text-ink-500">Step 2: click Write on a row below</span>
-          </div>
+        <section className="card p-4 mb-8 sm:p-5">
+          <p className="text-xs text-emerald-800 sm:text-sm">
+            {prospectResult.message
+              ? prospectResult.message
+              : prospectResult.creditsUsed === 0
+                ? `No emails found — all ${prospectResult.creditsReserved} credits refunded. Try different keywords.`
+                : prospectResult.creditsRefunded > 0
+                  ? `✓ Found ${prospectResult.creditsUsed} of ${prospectResult.creditsReserved} emails — ${prospectResult.creditsUsed} credits used, ${prospectResult.creditsRefunded} credits refunded`
+                  : `✓ Found ${prospectResult.creditsUsed} emails — ${prospectResult.creditsUsed} credits used`}
+          </p>
+
+          {prospectResult.leads.length > 0 && (
+            <div className="mt-4 rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 px-4 py-3.5 sm:px-5 sm:py-4">
+              <p className="text-base font-bold text-ink-900 sm:text-lg">
+                🎉 Found {prospectResult.leads.length} prospect{prospectResult.leads.length !== 1 ? "s" : ""}! Now send
+                them a personalized email — click &quot;Write&quot; to get started.
+              </p>
+            </div>
+          )}
 
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
@@ -422,6 +562,11 @@ export default function DashboardPage() {
                 {prospectResult.leads.map((row) => {
                   const key = rowKeyFor(row);
                   const composer = rowComposers[key] ?? defaultComposer();
+                  const sent = !!sessionSentRowKeys[key];
+                  const showAiHint =
+                    composer.open && !composer.postSendSuccess && !composer.subject.trim() && !composer.body.trim() && !composer.generating;
+                  const pulseWrite = writePulseRowKey === key && !composer.open && !sent;
+
                   return (
                     <Fragment key={key}>
                       <tr className="border-b border-surface-100">
@@ -433,53 +578,134 @@ export default function DashboardPage() {
                           </a>
                         </td>
                         <td className="py-2">
-                          <button
-                            className="inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
-                            onClick={() => {
-                              if (composer.open) updateComposer(key, (prev) => ({ ...prev, open: false }));
-                              else openComposerForRow(key);
-                            }}
-                          >
-                            {composer.open ? "Close" : "Write →"}
-                          </button>
+                          {sent ? (
+                            <span className="inline-flex items-center rounded-md bg-surface-100 px-3 py-2 text-xs font-medium text-ink-500">
+                              ✓ Sent
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className={cn(
+                                "inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600",
+                                pulseWrite && "animate-pulse ring-2 ring-orange-300 ring-offset-2"
+                              )}
+                              onClick={() => {
+                                if (composer.open) {
+                                  updateComposer(key, (prev) => ({
+                                    ...prev,
+                                    open: false,
+                                    postSendSuccess: false,
+                                    sentToEmail: null,
+                                  }));
+                                } else {
+                                  openComposerForRow(key);
+                                }
+                              }}
+                            >
+                              {composer.open ? "Close" : "Write →"}
+                            </button>
+                          )}
                         </td>
                       </tr>
                       <tr className="border-b border-surface-100">
                         <td colSpan={4} className="p-0">
-                          <div className={cn("overflow-hidden transition-all duration-300 ease-out", composer.open ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0")}>
+                          <div className={cn("overflow-hidden transition-all duration-300 ease-out", composer.open ? "max-h-[1400px] opacity-100" : "max-h-0 opacity-0")}>
                             <div className="bg-orange-50/30 border-l-2 border-orange-400 px-4 py-4 sm:px-5 sm:py-5">
                               <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
-                                <div className="text-sm text-ink-700">
-                                  <span className="font-medium">To:</span> {row.email}
-                                </div>
-                                <input
-                                  className="input-field"
-                                  value={composer.subject}
-                                  onChange={(e) => updateComposer(key, (prev) => ({ ...prev, subject: e.target.value }))}
-                                  placeholder="Subject"
-                                />
-                                <textarea
-                                  className="input-field min-h-36"
-                                  value={composer.body}
-                                  onChange={(e) => updateComposer(key, (prev) => ({ ...prev, body: e.target.value }))}
-                                  placeholder="Body"
-                                />
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                  <button className="btn-secondary" onClick={() => handleGenerateAi(row)} disabled={composer.generating}>
-                                    <Sparkles className="w-4 h-4" />
-                                    {composer.generating ? "Writing..." : "AI Generate"}
-                                  </button>
-                                  <button
-                                    className="btn-primary"
-                                    onClick={() => openInMail(row)}
-                                    disabled={!composer.subject.trim() || !composer.body.trim()}
-                                  >
-                                    <Mail className="w-4 h-4" />
-                                    Send Email
-                                  </button>
-                                </div>
-                                {composer.error && <p className="text-sm text-red-600">{composer.error}</p>}
-                                {composer.notice && <p className="text-sm text-emerald-700">{composer.notice}</p>}
+                                {composer.postSendSuccess && composer.sentToEmail ? (
+                                  <div className="space-y-4 py-2">
+                                    <div className="flex items-start gap-2 text-emerald-800">
+                                      <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600" strokeWidth={2.5} />
+                                      <div>
+                                        <p className="text-base font-bold text-emerald-900">Email sent to {composer.sentToEmail}</p>
+                                        <p className="mt-2 text-sm font-semibold text-ink-800">What&apos;s next?</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                      <button
+                                        type="button"
+                                        className="btn-primary inline-flex flex-1 items-center justify-center gap-1 text-sm"
+                                        onClick={() => openNextUnsentProspect(key)}
+                                      >
+                                        Send to next prospect
+                                        <ArrowRight className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-secondary inline-flex flex-1 items-center justify-center gap-1 text-sm"
+                                        onClick={() => {
+                                          updateComposer(key, (prev) => ({ ...prev, open: false, postSendSuccess: false, sentToEmail: null }));
+                                          scrollToSearchAndFocus();
+                                        }}
+                                      >
+                                        Find more leads
+                                        <ArrowRight className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="text-sm text-ink-700">
+                                      <span className="font-medium">To:</span> {row.email}
+                                    </div>
+                                    <input
+                                      className="input-field"
+                                      value={composer.subject}
+                                      onChange={(e) => updateComposer(key, (prev) => ({ ...prev, subject: e.target.value }))}
+                                      placeholder="Subject"
+                                    />
+                                    <div className="space-y-2">
+                                      {showAiHint && (
+                                        <p className="rounded-lg border border-dashed border-brand-200 bg-brand-50/60 px-3 py-2.5 text-sm leading-relaxed text-ink-700">
+                                          Not sure what to write?{" "}
+                                          <button
+                                            type="button"
+                                            className="font-semibold text-brand-700 underline decoration-brand-400 hover:text-brand-800"
+                                            onClick={() => void handleGenerateAi(row)}
+                                          >
+                                            AI Generate
+                                          </button>{" "}
+                                          and we&apos;ll draft a personalized pitch for you.
+                                        </p>
+                                      )}
+                                      <textarea
+                                        className="input-field min-h-36"
+                                        value={composer.body}
+                                        onChange={(e) => updateComposer(key, (prev) => ({ ...prev, body: e.target.value }))}
+                                        placeholder="Body"
+                                      />
+                                    </div>
+                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                                      <div className="flex flex-col gap-1">
+                                        <button
+                                          type="button"
+                                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-100 px-4 py-2.5 text-sm font-semibold text-orange-900 shadow-sm transition-colors hover:bg-orange-200 disabled:opacity-50 sm:px-5 sm:py-3 sm:text-base"
+                                          onClick={() => void handleGenerateAi(row)}
+                                          disabled={composer.generating}
+                                        >
+                                          <Sparkles className="h-5 w-5" />
+                                          {composer.generating ? "Writing..." : "AI Generate"}
+                                        </button>
+                                        <p className="text-xs text-ink-500 sm:max-w-[220px]">
+                                          Auto-generate a personalized pitch in seconds
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="btn-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto"
+                                        onClick={() => openInMail(row)}
+                                        disabled={!composer.subject.trim() || !composer.body.trim()}
+                                      >
+                                        <Mail className="w-4 h-4" />
+                                        Send Email
+                                      </button>
+                                    </div>
+                                    {composer.error && <p className="text-sm text-red-600">{composer.error}</p>}
+                                    {composer.notice && !composer.postSendSuccess && (
+                                      <p className="text-sm text-emerald-700">{composer.notice}</p>
+                                    )}
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -492,6 +718,44 @@ export default function DashboardPage() {
             </table>
           </div>
         </section>
+      )}
+
+      {creditsExhaustedModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="credits-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCreditsExhaustedModalOpen(false);
+          }}
+        >
+          <div className="card max-w-md space-y-4 p-6 shadow-elevated">
+            <h2 id="credits-modal-title" className="text-lg font-bold text-ink-900">
+              You&apos;ve used all your free credits!
+            </h2>
+            {usageStatsForModal !== null && (usageStatsForModal.prospects > 0 || usageStatsForModal.sent > 0) && (
+              <p className="text-sm text-ink-600">
+                You&apos;ve already found <strong className="text-ink-900">{usageStatsForModal.prospects}</strong> prospect
+                {usageStatsForModal.prospects !== 1 ? "s" : ""} and sent <strong className="text-ink-900">{usageStatsForModal.sent}</strong> email
+                {usageStatsForModal.sent !== 1 ? "s" : ""}.
+              </p>
+            )}
+            {usageStatsForModal === null && <Loader2 className="h-5 w-5 animate-spin text-brand-500" />}
+            <p className="text-sm text-ink-600">
+              Upgrade to Pro to get 150 credits every month and keep growing.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button type="button" className="btn-ghost order-2 sm:order-1" onClick={() => setCreditsExhaustedModalOpen(false)}>
+                Maybe later
+              </button>
+              <Link href="/pricing" className="btn-primary order-1 text-center sm:order-2" onClick={() => setCreditsExhaustedModalOpen(false)}>
+                Upgrade to Pro — $19/mo
+                <ArrowRight className="ml-1 inline h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+        </div>
       )}
 
       {credits !== null && (
