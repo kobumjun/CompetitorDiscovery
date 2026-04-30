@@ -376,7 +376,7 @@ export default function DashboardPage() {
     }
   }
 
-  function prospectComposerCardBody(row: ProspectLead, key: string, composer: RowComposerState, showAiHint: boolean) {
+  function prospectComposerCardBody(row: ProspectLead, key: string, composer: RowComposerState) {
     return composer.postSendSuccess && composer.sentToEmail ? (
       <div className="space-y-4 py-2">
         <div className="flex items-start gap-2 text-emerald-800">
@@ -419,40 +419,22 @@ export default function DashboardPage() {
           onChange={(e) => updateComposer(key, (prev) => ({ ...prev, subject: e.target.value }))}
           placeholder="Subject"
         />
-        <div className="min-w-0 space-y-2">
-          {showAiHint && (
-            <p className="rounded-lg border border-dashed border-brand-200 bg-brand-50/60 px-3 py-2.5 text-sm leading-relaxed text-ink-700">
-              Not sure what to write?{" "}
-              <button
-                type="button"
-                className="font-semibold text-brand-700 underline decoration-brand-400 hover:text-brand-800"
-                onClick={() => void handleGenerateAi(row)}
-              >
-                AI Generate
-              </button>{" "}
-              and we&apos;ll draft a personalized pitch for you.
-            </p>
-          )}
-          <textarea
-            className="input-field min-h-36 min-w-0 resize-y"
-            value={composer.body}
-            onChange={(e) => updateComposer(key, (prev) => ({ ...prev, body: e.target.value }))}
-            placeholder="Body"
-          />
-        </div>
-        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex min-w-0 flex-col gap-1 sm:max-w-[55%]">
-            <button
-              type="button"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-100 px-4 py-2.5 text-sm font-semibold text-orange-900 shadow-sm transition-colors hover:bg-orange-200 disabled:opacity-50 sm:w-auto sm:px-5 sm:py-3 sm:text-base"
-              onClick={() => void handleGenerateAi(row)}
-              disabled={composer.generating}
-            >
-              <Sparkles className="h-5 w-5 flex-shrink-0" />
-              {composer.generating ? "Writing..." : "AI Generate"}
-            </button>
-            <p className="text-xs text-ink-500">Auto-generate a personalized pitch in seconds</p>
-          </div>
+        <textarea
+          className="input-field min-h-36 min-w-0 resize-y"
+          value={composer.body}
+          onChange={(e) => updateComposer(key, (prev) => ({ ...prev, body: e.target.value }))}
+          placeholder="Body"
+        />
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            className="btn-secondary inline-flex items-center justify-center gap-2"
+            onClick={() => void handleGenerateAi(row)}
+            disabled={composer.generating}
+          >
+            <Sparkles className="h-4 w-4" />
+            {composer.generating ? "Writing..." : "✨ AI Generate"}
+          </button>
           <button
             type="button"
             className="btn-primary inline-flex w-full min-w-0 flex-shrink-0 items-center justify-center gap-2 sm:w-auto"
@@ -635,9 +617,6 @@ export default function DashboardPage() {
                 const key = rowKeyFor(row);
                 const composer = rowComposers[key] ?? defaultComposer();
                 const sent = !!sessionSentRowKeys[key];
-                const showAiHint =
-                  composer.open && !composer.postSendSuccess && !composer.subject.trim() && !composer.body.trim() && !composer.generating;
-
                 return (
                   <div key={key} className="flex min-w-0 flex-col gap-3">
                     <div className="min-w-0 rounded-xl border border-surface-200 bg-white p-4 shadow-sm">
@@ -681,7 +660,7 @@ export default function DashboardPage() {
                     {composer.open && (
                       <div className="min-w-0 rounded-xl border border-orange-200 bg-orange-50/50 p-3">
                         <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
-                          {prospectComposerCardBody(row, key, composer, showAiHint)}
+                          {prospectComposerCardBody(row, key, composer)}
                         </div>
                       </div>
                     )}
@@ -706,9 +685,6 @@ export default function DashboardPage() {
                   const key = rowKeyFor(row);
                   const composer = rowComposers[key] ?? defaultComposer();
                   const sent = !!sessionSentRowKeys[key];
-                  const showAiHint =
-                    composer.open && !composer.postSendSuccess && !composer.subject.trim() && !composer.body.trim() && !composer.generating;
-
                   return (
                     <Fragment key={key}>
                       <tr className="border-b border-surface-100">
@@ -751,7 +727,7 @@ export default function DashboardPage() {
                           <div className={cn("overflow-hidden transition-all duration-300 ease-out", composer.open ? "max-h-[1400px] opacity-100" : "max-h-0 opacity-0")}>
                             <div className="bg-orange-50/30 border-l-2 border-orange-400 px-4 py-4 sm:px-5 sm:py-5">
                               <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
-                                {prospectComposerCardBody(row, key, composer, showAiHint)}
+                                {prospectComposerCardBody(row, key, composer)}
                               </div>
                             </div>
                           </div>

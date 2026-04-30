@@ -587,8 +587,7 @@ export async function POST(request: NextRequest) {
     if (creditsUsed === targetCount) {
       message = `✓ Found ${creditsUsed} emails — ${creditsUsed} credits used`;
     } else if (creditsUsed > 0) {
-      const dupPart = duplicatesSkipped > 0 ? ` (${duplicatesSkipped} duplicates skipped)` : "";
-      message = `✓ Found ${creditsUsed} new emails${dupPart} — ${creditsUsed} credits used, ${creditsRefunded} credits refunded`;
+      message = `✓ Found ${creditsUsed} emails — ${creditsUsed} credits used, ${creditsRefunded} credits refunded`;
     } else {
       message = `No emails found — all ${targetCount} credits refunded. Try different keywords.`;
     }
