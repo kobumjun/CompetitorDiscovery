@@ -138,7 +138,6 @@ export default function DashboardPage() {
   const [prospectError, setProspectError] = useState<string | null>(null);
   const [prospectResult, setProspectResult] = useState<BulkPayload | null>(null);
   const [rowComposers, setRowComposers] = useState<Record<string, RowComposerState>>({});
-  const [writePulseRowKey, setWritePulseRowKey] = useState<string | null>(null);
   const [sessionSentRowKeys, setSessionSentRowKeys] = useState<Record<string, boolean>>({});
   const [creditsExhaustedModalOpen, setCreditsExhaustedModalOpen] = useState(false);
   const [usageStatsForModal, setUsageStatsForModal] = useState<{ prospects: number; sent: number } | null>(null);
@@ -185,15 +184,6 @@ export default function DashboardPage() {
     return `${row.lead_id}:${row.email}`;
   }
 
-  useEffect(() => {
-    if (!prospectResult?.leads?.length) {
-      setWritePulseRowKey(null);
-      return;
-    }
-    const first = prospectResult.leads[0];
-    setWritePulseRowKey(`${first.lead_id}:${first.email}`);
-  }, [prospectResult]);
-
   function updateComposer(rowKey: string, updater: (prev: RowComposerState) => RowComposerState) {
     setRowComposers((prev) => {
       const current = prev[rowKey] ?? defaultComposer();
@@ -202,7 +192,6 @@ export default function DashboardPage() {
   }
 
   function openComposerForRow(rowKey: string) {
-    setWritePulseRowKey(null);
     setRowComposers((prev) => {
       const next: Record<string, RowComposerState> = {};
       for (const [k, v] of Object.entries(prev)) {
@@ -379,6 +368,107 @@ export default function DashboardPage() {
     }));
   }
 
+  function sourceUrlLabel(url: string): string {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return url.length > 56 ? `${url.slice(0, 54)}…` : url;
+    }
+  }
+
+  function prospectComposerCardBody(row: ProspectLead, key: string, composer: RowComposerState, showAiHint: boolean) {
+    return composer.postSendSuccess && composer.sentToEmail ? (
+      <div className="space-y-4 py-2">
+        <div className="flex items-start gap-2 text-emerald-800">
+          <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600" strokeWidth={2.5} />
+          <div className="min-w-0">
+            <p className="text-base font-bold text-emerald-900">Email sent to {composer.sentToEmail}</p>
+            <p className="mt-2 text-sm font-semibold text-ink-800">What&apos;s next?</p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            className="btn-primary inline-flex w-full flex-1 items-center justify-center gap-1 text-sm sm:w-auto"
+            onClick={() => openNextUnsentProspect(key)}
+          >
+            Send to next prospect
+            <ArrowRight className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="btn-secondary inline-flex w-full flex-1 items-center justify-center gap-1 text-sm sm:w-auto"
+            onClick={() => {
+              updateComposer(key, (prev) => ({ ...prev, open: false, postSendSuccess: false, sentToEmail: null }));
+              scrollToSearchAndFocus();
+            }}
+          >
+            Find more leads
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    ) : (
+      <>
+        <div className="text-sm text-ink-700">
+          <span className="font-medium">To:</span> <span className="break-all">{row.email}</span>
+        </div>
+        <input
+          className="input-field min-w-0"
+          value={composer.subject}
+          onChange={(e) => updateComposer(key, (prev) => ({ ...prev, subject: e.target.value }))}
+          placeholder="Subject"
+        />
+        <div className="min-w-0 space-y-2">
+          {showAiHint && (
+            <p className="rounded-lg border border-dashed border-brand-200 bg-brand-50/60 px-3 py-2.5 text-sm leading-relaxed text-ink-700">
+              Not sure what to write?{" "}
+              <button
+                type="button"
+                className="font-semibold text-brand-700 underline decoration-brand-400 hover:text-brand-800"
+                onClick={() => void handleGenerateAi(row)}
+              >
+                AI Generate
+              </button>{" "}
+              and we&apos;ll draft a personalized pitch for you.
+            </p>
+          )}
+          <textarea
+            className="input-field min-h-36 min-w-0 resize-y"
+            value={composer.body}
+            onChange={(e) => updateComposer(key, (prev) => ({ ...prev, body: e.target.value }))}
+            placeholder="Body"
+          />
+        </div>
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex min-w-0 flex-col gap-1 sm:max-w-[55%]">
+            <button
+              type="button"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-100 px-4 py-2.5 text-sm font-semibold text-orange-900 shadow-sm transition-colors hover:bg-orange-200 disabled:opacity-50 sm:w-auto sm:px-5 sm:py-3 sm:text-base"
+              onClick={() => void handleGenerateAi(row)}
+              disabled={composer.generating}
+            >
+              <Sparkles className="h-5 w-5 flex-shrink-0" />
+              {composer.generating ? "Writing..." : "AI Generate"}
+            </button>
+            <p className="text-xs text-ink-500">Auto-generate a personalized pitch in seconds</p>
+          </div>
+          <button
+            type="button"
+            className="btn-primary inline-flex w-full min-w-0 flex-shrink-0 items-center justify-center gap-2 sm:w-auto"
+            onClick={() => openInMail(row)}
+            disabled={!composer.subject.trim() || !composer.body.trim()}
+          >
+            <Mail className="h-4 w-4 flex-shrink-0" />
+            Send Email
+          </button>
+        </div>
+        {composer.error && <p className="text-sm text-red-600">{composer.error}</p>}
+        {composer.notice && !composer.postSendSuccess && <p className="text-sm text-emerald-700">{composer.notice}</p>}
+      </>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6 sm:mb-8">
@@ -539,16 +629,69 @@ export default function DashboardPage() {
                   : `✓ Found ${prospectResult.creditsUsed} emails — ${prospectResult.creditsUsed} credits used`}
           </p>
 
-          {prospectResult.leads.length > 0 && (
-            <div className="mt-4 rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 px-4 py-3.5 sm:px-5 sm:py-4">
-              <p className="text-base font-bold text-ink-900 sm:text-lg">
-                🎉 Found {prospectResult.leads.length} prospect{prospectResult.leads.length !== 1 ? "s" : ""}! Now send
-                them a personalized email — click &quot;Write&quot; to get started.
-              </p>
-            </div>
-          )}
+          <div className="mt-4 md:hidden">
+            <div className="flex flex-col gap-3 sm:gap-4">
+              {prospectResult.leads.map((row) => {
+                const key = rowKeyFor(row);
+                const composer = rowComposers[key] ?? defaultComposer();
+                const sent = !!sessionSentRowKeys[key];
+                const showAiHint =
+                  composer.open && !composer.postSendSuccess && !composer.subject.trim() && !composer.body.trim() && !composer.generating;
 
-          <div className="mt-4 overflow-x-auto">
+                return (
+                  <div key={key} className="flex min-w-0 flex-col gap-3">
+                    <div className="min-w-0 rounded-xl border border-surface-200 bg-white p-4 shadow-sm">
+                      <p className="break-words text-base font-bold text-ink-900">{row.email}</p>
+                      <p className="mt-1.5 text-xs text-ink-500">{row.company_name || "—"}</p>
+                      <a
+                        className="mt-2 block break-all text-xs font-medium text-brand-600 hover:underline"
+                        href={row.source_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {sourceUrlLabel(row.source_url)}
+                      </a>
+                      <div className="mt-4">
+                        {sent ? (
+                          <span className="flex w-full items-center justify-center rounded-lg bg-surface-100 py-3 text-sm font-medium text-ink-500">
+                            ✓ Sent
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-center rounded-lg bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+                            onClick={() => {
+                              if (composer.open) {
+                                updateComposer(key, (prev) => ({
+                                  ...prev,
+                                  open: false,
+                                  postSendSuccess: false,
+                                  sentToEmail: null,
+                                }));
+                              } else {
+                                openComposerForRow(key);
+                              }
+                            }}
+                          >
+                            {composer.open ? "Close" : "Write →"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {composer.open && (
+                      <div className="min-w-0 rounded-xl border border-orange-200 bg-orange-50/50 p-3">
+                        <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
+                          {prospectComposerCardBody(row, key, composer, showAiHint)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-4 hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="text-left text-ink-500 border-b border-surface-200">
                 <tr>
@@ -565,7 +708,6 @@ export default function DashboardPage() {
                   const sent = !!sessionSentRowKeys[key];
                   const showAiHint =
                     composer.open && !composer.postSendSuccess && !composer.subject.trim() && !composer.body.trim() && !composer.generating;
-                  const pulseWrite = writePulseRowKey === key && !composer.open && !sent;
 
                   return (
                     <Fragment key={key}>
@@ -585,10 +727,7 @@ export default function DashboardPage() {
                           ) : (
                             <button
                               type="button"
-                              className={cn(
-                                "inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600",
-                                pulseWrite && "animate-pulse ring-2 ring-orange-300 ring-offset-2"
-                              )}
+                              className="inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
                               onClick={() => {
                                 if (composer.open) {
                                   updateComposer(key, (prev) => ({
@@ -612,100 +751,7 @@ export default function DashboardPage() {
                           <div className={cn("overflow-hidden transition-all duration-300 ease-out", composer.open ? "max-h-[1400px] opacity-100" : "max-h-0 opacity-0")}>
                             <div className="bg-orange-50/30 border-l-2 border-orange-400 px-4 py-4 sm:px-5 sm:py-5">
                               <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
-                                {composer.postSendSuccess && composer.sentToEmail ? (
-                                  <div className="space-y-4 py-2">
-                                    <div className="flex items-start gap-2 text-emerald-800">
-                                      <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600" strokeWidth={2.5} />
-                                      <div>
-                                        <p className="text-base font-bold text-emerald-900">Email sent to {composer.sentToEmail}</p>
-                                        <p className="mt-2 text-sm font-semibold text-ink-800">What&apos;s next?</p>
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-col gap-2 sm:flex-row">
-                                      <button
-                                        type="button"
-                                        className="btn-primary inline-flex flex-1 items-center justify-center gap-1 text-sm"
-                                        onClick={() => openNextUnsentProspect(key)}
-                                      >
-                                        Send to next prospect
-                                        <ArrowRight className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="btn-secondary inline-flex flex-1 items-center justify-center gap-1 text-sm"
-                                        onClick={() => {
-                                          updateComposer(key, (prev) => ({ ...prev, open: false, postSendSuccess: false, sentToEmail: null }));
-                                          scrollToSearchAndFocus();
-                                        }}
-                                      >
-                                        Find more leads
-                                        <ArrowRight className="h-4 w-4" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <div className="text-sm text-ink-700">
-                                      <span className="font-medium">To:</span> {row.email}
-                                    </div>
-                                    <input
-                                      className="input-field"
-                                      value={composer.subject}
-                                      onChange={(e) => updateComposer(key, (prev) => ({ ...prev, subject: e.target.value }))}
-                                      placeholder="Subject"
-                                    />
-                                    <div className="space-y-2">
-                                      {showAiHint && (
-                                        <p className="rounded-lg border border-dashed border-brand-200 bg-brand-50/60 px-3 py-2.5 text-sm leading-relaxed text-ink-700">
-                                          Not sure what to write?{" "}
-                                          <button
-                                            type="button"
-                                            className="font-semibold text-brand-700 underline decoration-brand-400 hover:text-brand-800"
-                                            onClick={() => void handleGenerateAi(row)}
-                                          >
-                                            AI Generate
-                                          </button>{" "}
-                                          and we&apos;ll draft a personalized pitch for you.
-                                        </p>
-                                      )}
-                                      <textarea
-                                        className="input-field min-h-36"
-                                        value={composer.body}
-                                        onChange={(e) => updateComposer(key, (prev) => ({ ...prev, body: e.target.value }))}
-                                        placeholder="Body"
-                                      />
-                                    </div>
-                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                                      <div className="flex flex-col gap-1">
-                                        <button
-                                          type="button"
-                                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-100 px-4 py-2.5 text-sm font-semibold text-orange-900 shadow-sm transition-colors hover:bg-orange-200 disabled:opacity-50 sm:px-5 sm:py-3 sm:text-base"
-                                          onClick={() => void handleGenerateAi(row)}
-                                          disabled={composer.generating}
-                                        >
-                                          <Sparkles className="h-5 w-5" />
-                                          {composer.generating ? "Writing..." : "AI Generate"}
-                                        </button>
-                                        <p className="text-xs text-ink-500 sm:max-w-[220px]">
-                                          Auto-generate a personalized pitch in seconds
-                                        </p>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        className="btn-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto"
-                                        onClick={() => openInMail(row)}
-                                        disabled={!composer.subject.trim() || !composer.body.trim()}
-                                      >
-                                        <Mail className="w-4 h-4" />
-                                        Send Email
-                                      </button>
-                                    </div>
-                                    {composer.error && <p className="text-sm text-red-600">{composer.error}</p>}
-                                    {composer.notice && !composer.postSendSuccess && (
-                                      <p className="text-sm text-emerald-700">{composer.notice}</p>
-                                    )}
-                                  </>
-                                )}
+                                {prospectComposerCardBody(row, key, composer, showAiHint)}
                               </div>
                             </div>
                           </div>
