@@ -47,17 +47,41 @@ export function normalizeUrl(input: string): URL | null {
 }
 
 async function fetchPageContent(url: string, timeoutMs: number): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ProposalPilot/1.0)",
       },
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: controller.signal,
     });
     if (!res.ok) return "";
-    return await res.text();
-  } catch {
+    // Some runtimes leave body reads hanging after headers; race with abort listener.
+    const bodyPromise = res.text();
+    const abortPromise = new Promise<never>((_, reject) => {
+      if (controller.signal.aborted) {
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        return;
+      }
+      controller.signal.addEventListener(
+        "abort",
+        () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
+        { once: true },
+      );
+    });
+    return await Promise.race([bodyPromise, abortPromise]);
+  } catch (err) {
+    const aborted =
+      controller.signal.aborted ||
+      (err instanceof Error &&
+        (err.name === "AbortError" || err.message === "aborted" || err.message.includes("abort")));
+    if (aborted) {
+      console.log(`[크롤링 타임아웃] ${url}`);
+    }
     return "";
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

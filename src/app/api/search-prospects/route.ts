@@ -7,7 +7,7 @@ export const maxDuration = 60;
 
 const SERPER_ENDPOINT = "https://google.serper.dev/search";
 /** Per-path HTTP fetch inside `extractWebsiteEmails` (paths run in parallel per site). */
-const CRAWL_FETCH_TIMEOUT_MS = 3000;
+const CRAWL_FETCH_TIMEOUT_MS = 5000;
 /** Concurrent prospect URLs per crawl batch (`Promise.allSettled`). */
 const CRAWL_PARALLEL_BATCH = 4;
 /** Stop crawling when request wall time exceeds this (align with Vercel ~60s − buffer for planner/Serper/DB). */
@@ -355,6 +355,7 @@ export async function POST(request: NextRequest) {
   let userId = "";
   try {
     console.log("[search-prospects] === START ===");
+    const processStart = Date.now();
 
     // ── Auth ──
     const supabase = await createClient();
@@ -395,8 +396,7 @@ export async function POST(request: NextRequest) {
     }
     reservedCredits = targetCount;
 
-    const startTime = Date.now();
-    const isTimedOut = () => Date.now() - startTime > OVERALL_TIMEOUT_MS;
+    const isTimedOut = () => Date.now() - processStart > OVERALL_TIMEOUT_MS;
 
     const keyword = query.trim();
     const cleaned = stripSellPrefixes(keyword) || keyword;
@@ -499,11 +499,9 @@ export async function POST(request: NextRequest) {
       candidateIndex < candidateUrls.length &&
       !isTimedOut()
     ) {
-      if (Date.now() - startTime >= CRAWL_SAFE_DEADLINE_MS) {
+      if (Date.now() - processStart >= CRAWL_SAFE_DEADLINE_MS) {
         crawlStoppedForSafeDeadline = true;
-        console.log(
-          "[search-prospects] 안전 타임아웃 - 요청 시작 기준 50s 초과로 크롤링 중단, 현재까지 결과로 응답",
-        );
+        console.log("[search-prospects] 안전 타임아웃 도달 - 현재까지 결과로 응답");
         break;
       }
 
@@ -517,11 +515,9 @@ export async function POST(request: NextRequest) {
       for (let i = 0; i < settled.length; i++) {
         const url = batch[i]!;
         if (newResultRows.length >= targetCount) break;
-        if (Date.now() - startTime >= CRAWL_SAFE_DEADLINE_MS) {
+        if (Date.now() - processStart >= CRAWL_SAFE_DEADLINE_MS) {
           crawlStoppedForSafeDeadline = true;
-          console.log(
-            "[search-prospects] 안전 타임아웃 - 요청 시작 기준 50s 초과 (배치 처리 중), 현재까지 결과로 응답",
-          );
+          console.log("[search-prospects] 안전 타임아웃 도달 (배치 처리 중) - 현재까지 결과로 응답");
           break crawlLoop;
         }
 
@@ -653,7 +649,7 @@ export async function POST(request: NextRequest) {
       message = `No emails found — all ${targetCount} credits refunded. Try different keywords.`;
     }
 
-    console.log("[search-prospects] === DONE === used:", creditsUsed, "refunded:", creditsRefunded, "elapsed:", Date.now() - startTime, "ms");
+    console.log("[search-prospects] === DONE === used:", creditsUsed, "refunded:", creditsRefunded, "elapsed:", Date.now() - processStart, "ms");
 
     return NextResponse.json({
       success: true,
