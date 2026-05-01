@@ -10,10 +10,10 @@ const SERPER_ENDPOINT = "https://google.serper.dev/search";
 const CRAWL_FETCH_TIMEOUT_MS = 5000;
 /** Concurrent prospect URLs per crawl batch (`Promise.allSettled`). */
 const CRAWL_PARALLEL_BATCH = 4;
-/** Stop crawling when request wall time exceeds this (align with Vercel ~60s − buffer for planner/Serper/DB). */
-const CRAWL_SAFE_DEADLINE_MS = 50_000;
 /** Hard cap for entire POST (planner + Serper + crawl + inserts); stay under `maxDuration`. */
 const OVERALL_TIMEOUT_MS = 58_000;
+/** Upper bound for one prospect `extractWebsiteEmails` (parallel paths; avoids stuck Promise.all). */
+const SITE_EXTRACT_HARD_MS = 20_000;
 const MAX_SERPER_URLS = 20;
 const SEARCH_EXTRACT_PATHS = ["", "/contact", "/about"];
 
@@ -323,29 +323,37 @@ type CrawlSingleResult =
  * Fetch + parse one prospect URL (no shared mutable state). Caller merges into `emailSeen` in batch order.
  */
 async function crawlSingleUrlForRow(url: string): Promise<CrawlSingleResult> {
+  const siteStart = Date.now();
   try {
-    const extraction = await extractWebsiteEmails(url, {
-      timeoutMs: CRAWL_FETCH_TIMEOUT_MS,
-      paths: SEARCH_EXTRACT_PATHS,
-    });
+    const extraction = await Promise.race([
+      extractWebsiteEmails(url, {
+        timeoutMs: CRAWL_FETCH_TIMEOUT_MS,
+        paths: SEARCH_EXTRACT_PATHS,
+      }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("site_extract_hard_timeout")), SITE_EXTRACT_HARD_MS);
+      }),
+    ]);
     if (!extraction.ok) {
       const detail = `${extraction.code}: ${extraction.message}`;
-      console.log(`[크롤링 스킵] ${url} - ${detail}`);
+      console.log(`[크롤링 실패] ${url} - ${detail} - ${Date.now() - siteStart}ms`);
       return { kind: "failure", url, reason: extraction.code };
     }
     if (extraction.emails.length === 0) {
-      console.log(`[크롤링 스킵] ${url} - No email found`);
+      console.log(`[크롤링 실패] ${url} - No email found - ${Date.now() - siteStart}ms`);
       return { kind: "failure", url, reason: "No email found" };
     }
     const ok = extraction as OkExtraction;
     const best = selectPreferredTargetEmail(ok.emails);
     if (!best) {
-      console.log(`[크롤링 스킵] ${url} - No suitable email`);
+      console.log(`[크롤링 실패] ${url} - No suitable email - ${Date.now() - siteStart}ms`);
       return { kind: "failure", url, reason: "No email found" };
     }
+    console.log(`[크롤링 완료] ${url} - ${Date.now() - siteStart}ms`);
     return { kind: "row", row: rowFromExtraction(ok, best) };
   } catch (err) {
-    console.log(`[크롤링 스킵] ${url} - timeout or error`, err instanceof Error ? err.message : String(err));
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`[크롤링 실패] ${url} - ${msg} - ${Date.now() - siteStart}ms`);
     return { kind: "failure", url, reason: "Crawl failed" };
   }
 }
@@ -355,7 +363,7 @@ export async function POST(request: NextRequest) {
   let userId = "";
   try {
     console.log("[search-prospects] === START ===");
-    const processStart = Date.now();
+    const PROCESS_START = Date.now();
 
     // ── Auth ──
     const supabase = await createClient();
@@ -396,7 +404,7 @@ export async function POST(request: NextRequest) {
     }
     reservedCredits = targetCount;
 
-    const isTimedOut = () => Date.now() - processStart > OVERALL_TIMEOUT_MS;
+    const isTimedOut = () => Date.now() - PROCESS_START > OVERALL_TIMEOUT_MS;
 
     const keyword = query.trim();
     const cleaned = stripSellPrefixes(keyword) || keyword;
@@ -499,9 +507,9 @@ export async function POST(request: NextRequest) {
       candidateIndex < candidateUrls.length &&
       !isTimedOut()
     ) {
-      if (Date.now() - processStart >= CRAWL_SAFE_DEADLINE_MS) {
+      if (Date.now() - PROCESS_START > 50000) {
         crawlStoppedForSafeDeadline = true;
-        console.log("[search-prospects] 안전 타임아웃 도달 - 현재까지 결과로 응답");
+        console.log("[search-prospects] 50초 안전 타임아웃 - 루프 중단");
         break;
       }
 
@@ -510,14 +518,20 @@ export async function POST(request: NextRequest) {
       batchN += 1;
       if (batch.length === 0) break;
 
+      if (Date.now() - PROCESS_START > 50000) {
+        crawlStoppedForSafeDeadline = true;
+        console.log("[search-prospects] 50초 안전 타임아웃 - 루프 중단");
+        break;
+      }
+
       const settled = await Promise.allSettled(batch.map((url) => crawlSingleUrlForRow(url)));
 
       for (let i = 0; i < settled.length; i++) {
         const url = batch[i]!;
         if (newResultRows.length >= targetCount) break;
-        if (Date.now() - processStart >= CRAWL_SAFE_DEADLINE_MS) {
+        if (Date.now() - PROCESS_START > 50000) {
           crawlStoppedForSafeDeadline = true;
-          console.log("[search-prospects] 안전 타임아웃 도달 (배치 처리 중) - 현재까지 결과로 응답");
+          console.log("[search-prospects] 50초 안전 타임아웃 - 루프 중단");
           break crawlLoop;
         }
 
@@ -649,7 +663,7 @@ export async function POST(request: NextRequest) {
       message = `No emails found — all ${targetCount} credits refunded. Try different keywords.`;
     }
 
-    console.log("[search-prospects] === DONE === used:", creditsUsed, "refunded:", creditsRefunded, "elapsed:", Date.now() - processStart, "ms");
+    console.log("[search-prospects] === DONE === used:", creditsUsed, "refunded:", creditsRefunded, "elapsed:", Date.now() - PROCESS_START, "ms");
 
     return NextResponse.json({
       success: true,

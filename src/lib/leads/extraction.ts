@@ -46,10 +46,18 @@ export function normalizeUrl(input: string): URL | null {
   }
 }
 
+/**
+ * Single HTTP GET for one path. Network entrypoint for prospect crawling.
+ * Uses `fetch` + `Promise.race` hard deadline so hung TCP/body cannot exceed `timeoutMs`.
+ */
 async function fetchPageContent(url: string, timeoutMs: number): Promise<string> {
+  const urlStart = Date.now();
+  console.log(`[크롤링 시작] ${url}`);
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  try {
+  let hardTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const fetchWork = async (): Promise<string> => {
     const res = await fetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ProposalPilot/1.0)",
@@ -57,31 +65,26 @@ async function fetchPageContent(url: string, timeoutMs: number): Promise<string>
       signal: controller.signal,
     });
     if (!res.ok) return "";
-    // Some runtimes leave body reads hanging after headers; race with abort listener.
-    const bodyPromise = res.text();
-    const abortPromise = new Promise<never>((_, reject) => {
-      if (controller.signal.aborted) {
-        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
-        return;
-      }
-      controller.signal.addEventListener(
-        "abort",
-        () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
-        { once: true },
-      );
-    });
-    return await Promise.race([bodyPromise, abortPromise]);
+    return await res.text();
+  };
+
+  const hardDeadline = new Promise<never>((_, reject) => {
+    hardTimer = setTimeout(() => {
+      controller.abort();
+      reject(new Error("hard_timeout"));
+    }, timeoutMs);
+  });
+
+  try {
+    const html = await Promise.race([fetchWork(), hardDeadline]);
+    if (hardTimer !== undefined) clearTimeout(hardTimer);
+    console.log(`[크롤링 완료] ${url} - ${Date.now() - urlStart}ms`);
+    return html;
   } catch (err) {
-    const aborted =
-      controller.signal.aborted ||
-      (err instanceof Error &&
-        (err.name === "AbortError" || err.message === "aborted" || err.message.includes("abort")));
-    if (aborted) {
-      console.log(`[크롤링 타임아웃] ${url}`);
-    }
+    if (hardTimer !== undefined) clearTimeout(hardTimer);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`[크롤링 실패] ${url} - ${msg} - ${Date.now() - urlStart}ms`);
     return "";
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
