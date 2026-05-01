@@ -6,10 +6,14 @@ import { deriveCompanyNameFromHost, extractWebsiteEmails, normalizeUrl } from "@
 export const maxDuration = 60;
 
 const SERPER_ENDPOINT = "https://google.serper.dev/search";
-const URL_TIMEOUT_MS = 4000;
-const OVERALL_TIMEOUT_MS = 55_000;
-const BATCH_SIZE = 3;
-const MAX_CRAWL_MS = 7000;
+/** Per-path HTTP fetch inside `extractWebsiteEmails` (paths run in parallel per site). */
+const CRAWL_FETCH_TIMEOUT_MS = 3000;
+/** Concurrent prospect URLs per crawl batch (`Promise.allSettled`). */
+const CRAWL_PARALLEL_BATCH = 4;
+/** Stop crawling when request wall time exceeds this (align with Vercel ~60s − buffer for planner/Serper/DB). */
+const CRAWL_SAFE_DEADLINE_MS = 50_000;
+/** Hard cap for entire POST (planner + Serper + crawl + inserts); stay under `maxDuration`. */
+const OVERALL_TIMEOUT_MS = 58_000;
 const MAX_SERPER_URLS = 20;
 const SEARCH_EXTRACT_PATHS = ["", "/contact", "/about"];
 
@@ -311,24 +315,39 @@ function rowFromExtraction(extraction: OkExtraction, email: string): ExtractedPr
   };
 }
 
-async function tryExtractFromUrl(
-  url: string,
-  emailSeen: Set<string>
-): Promise<{ newRows: ExtractedProspectRow[]; dupRows: ExtractedProspectRow[] }> {
-  const extraction = await extractWebsiteEmails(url, {
-    timeoutMs: URL_TIMEOUT_MS,
-    paths: SEARCH_EXTRACT_PATHS,
-  });
-  if (!extraction.ok || extraction.emails.length === 0) return { newRows: [], dupRows: [] };
-  const ok = extraction as OkExtraction;
-  const best = selectPreferredTargetEmail(ok.emails);
-  if (!best) return { newRows: [], dupRows: [] };
-  const row = rowFromExtraction(ok, best);
-  const el = row.email.toLowerCase();
-  if (emailSeen.has(el)) {
-    return { newRows: [], dupRows: [row] };
+type CrawlSingleResult =
+  | { kind: "row"; row: ExtractedProspectRow }
+  | { kind: "failure"; url: string; reason: string };
+
+/**
+ * Fetch + parse one prospect URL (no shared mutable state). Caller merges into `emailSeen` in batch order.
+ */
+async function crawlSingleUrlForRow(url: string): Promise<CrawlSingleResult> {
+  try {
+    const extraction = await extractWebsiteEmails(url, {
+      timeoutMs: CRAWL_FETCH_TIMEOUT_MS,
+      paths: SEARCH_EXTRACT_PATHS,
+    });
+    if (!extraction.ok) {
+      const detail = `${extraction.code}: ${extraction.message}`;
+      console.log(`[크롤링 스킵] ${url} - ${detail}`);
+      return { kind: "failure", url, reason: extraction.code };
+    }
+    if (extraction.emails.length === 0) {
+      console.log(`[크롤링 스킵] ${url} - No email found`);
+      return { kind: "failure", url, reason: "No email found" };
+    }
+    const ok = extraction as OkExtraction;
+    const best = selectPreferredTargetEmail(ok.emails);
+    if (!best) {
+      console.log(`[크롤링 스킵] ${url} - No suitable email`);
+      return { kind: "failure", url, reason: "No email found" };
+    }
+    return { kind: "row", row: rowFromExtraction(ok, best) };
+  } catch (err) {
+    console.log(`[크롤링 스킵] ${url} - timeout or error`, err instanceof Error ? err.message : String(err));
+    return { kind: "failure", url, reason: "Crawl failed" };
   }
-  return { newRows: [row], dupRows: [] };
 }
 
 export async function POST(request: NextRequest) {
@@ -449,11 +468,23 @@ export async function POST(request: NextRequest) {
     console.log("[search-prospects] Crawl candidate URL count:", candidateUrls.length);
 
     if (candidateUrls.length === 0) {
+      console.log(
+        "[search-prospects:metrics]",
+        JSON.stringify({
+          serperOrganicLinksDeduped: allOrganic.length,
+          crawlCandidateUrls: 0,
+          urlsVisitedDuringCrawl: 0,
+          emailsInserted: 0,
+          crawlFailures: 0,
+          duplicatesSkipped: 0,
+          note: "no_crawl_candidates_after_filter",
+        }),
+      );
       await refundCredits(user.id, reservedCredits);
       return NextResponse.json({ error: "No companies found. Try broader keywords." }, { status: 404 });
     }
 
-    // ── Batch crawl: fill new emails up to targetCount (7s crawl window) ──
+    // ── Batch crawl: parallel batches (Promise.allSettled), strict crawl deadline + per-fetch timeouts ──
     const crawlStart = Date.now();
     const newResultRows: ExtractedProspectRow[] = [];
     const dupResultRows: ExtractedProspectRow[] = [];
@@ -461,52 +492,66 @@ export async function POST(request: NextRequest) {
     let candidateIndex = 0;
     let batchN = 0;
     let skippedDups = 0;
+    let crawlStoppedForSafeDeadline = false;
 
-    while (
+    crawlLoop: while (
       newResultRows.length < targetCount &&
       candidateIndex < candidateUrls.length &&
-      Date.now() - crawlStart < MAX_CRAWL_MS &&
       !isTimedOut()
     ) {
-      const batch = candidateUrls.slice(candidateIndex, candidateIndex + BATCH_SIZE);
+      if (Date.now() - startTime >= CRAWL_SAFE_DEADLINE_MS) {
+        crawlStoppedForSafeDeadline = true;
+        console.log(
+          "[search-prospects] 안전 타임아웃 - 요청 시작 기준 50s 초과로 크롤링 중단, 현재까지 결과로 응답",
+        );
+        break;
+      }
+
+      const batch = candidateUrls.slice(candidateIndex, candidateIndex + CRAWL_PARALLEL_BATCH);
       candidateIndex += batch.length;
       batchN += 1;
       if (batch.length === 0) break;
 
-      for (const url of batch) {
-        if (newResultRows.length >= targetCount) break;
-        if (Date.now() - crawlStart >= MAX_CRAWL_MS || isTimedOut()) break;
+      const settled = await Promise.allSettled(batch.map((url) => crawlSingleUrlForRow(url)));
 
-        let newRows: ExtractedProspectRow[] = [];
-        let dupRows: ExtractedProspectRow[] = [];
-        try {
-          const r = await tryExtractFromUrl(url, emailSeen);
-          newRows = r.newRows;
-          dupRows = r.dupRows;
-        } catch {
+      for (let i = 0; i < settled.length; i++) {
+        const url = batch[i]!;
+        if (newResultRows.length >= targetCount) break;
+        if (Date.now() - startTime >= CRAWL_SAFE_DEADLINE_MS) {
+          crawlStoppedForSafeDeadline = true;
+          console.log(
+            "[search-prospects] 안전 타임아웃 - 요청 시작 기준 50s 초과 (배치 처리 중), 현재까지 결과로 응답",
+          );
+          break crawlLoop;
+        }
+
+        const s = settled[i]!;
+        if (s.status === "rejected") {
+          console.log(`[크롤링 스킵] ${url} - timeout or error`, s.reason);
           failures.push({ url, reason: "Crawl failed" });
           continue;
         }
-        if (newRows.length === 0 && dupRows.length === 0) {
-          failures.push({ url, reason: "No email found" });
+
+        const v = s.value;
+        if (v.kind === "failure") {
+          failures.push({ url: v.url, reason: v.reason });
+          continue;
         }
-        skippedDups += dupRows.length;
-        dupResultRows.push(...dupRows);
-        for (const r of newRows) {
-          if (newResultRows.length >= targetCount) break;
-          const el = r.email.toLowerCase();
-          if (emailSeen.has(el)) {
-            dupResultRows.push(r);
-            skippedDups += 1;
-            continue;
-          }
-          emailSeen.add(el);
-          newResultRows.push(r);
-          console.log(`[새 이메일] ${r.email}`);
+
+        const row = v.row;
+        const el = row.email.toLowerCase();
+        if (emailSeen.has(el)) {
+          dupResultRows.push(row);
+          skippedDups += 1;
+          continue;
         }
+        emailSeen.add(el);
+        newResultRows.push(row);
+        console.log(`[새 이메일] ${row.email}`);
       }
+
       console.log(
-        `[배치] 새: ${newResultRows.length}/${targetCount} 중복: ${skippedDups} 후보남음: ${candidateUrls.length - candidateIndex}`
+        `[배치 ${batchN}] 병렬×${CRAWL_PARALLEL_BATCH} 새: ${newResultRows.length}/${targetCount} 중복스킵: ${skippedDups} 후보남음: ${candidateUrls.length - candidateIndex}`,
       );
     }
 
@@ -521,6 +566,8 @@ export async function POST(request: NextRequest) {
       failures.length,
       "crawl ms:",
       crawlElapsed,
+      "safeDeadline:",
+      crawlStoppedForSafeDeadline,
     );
 
     // ── Persist NEW rows only (each success → credit used) ──
@@ -582,6 +629,20 @@ export async function POST(request: NextRequest) {
       creditsUsed,
       creditsRefunded,
     };
+
+    /** Single-line metrics for ops dashboards / grep (Serper → crawl → DB). */
+    console.log(
+      "[search-prospects:metrics]",
+      JSON.stringify({
+        serperOrganicLinksDeduped: allOrganic.length,
+        crawlCandidateUrls: candidateUrls.length,
+        urlsVisitedDuringCrawl: stats.websitesCrawled,
+        emailsInserted: creditsUsed,
+        crawlFailures: failures.length,
+        duplicatesSkipped,
+        crawlStoppedForSafeDeadline,
+      }),
+    );
 
     let message: string;
     if (creditsUsed === targetCount) {
