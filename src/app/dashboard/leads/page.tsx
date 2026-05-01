@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useSWRConfig } from "swr";
 import { createClient } from "@/lib/supabase/client";
 import type { ExtractedLead, OutreachType } from "@/types";
-import { ChevronDown, Copy, Download, Globe, Grid3X3, Mail, Plus, Search, Sparkles } from "lucide-react";
+import { ChevronDown, Copy, Download, ExternalLink, Globe, Grid3X3, Mail, Plus, Search, Sparkles } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { ListPagination, LIST_PAGE_SIZE } from "@/components/list-pagination";
 import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
@@ -360,7 +360,6 @@ export default function LeadsPage() {
     const encodedBody = encodeURIComponent(withSignature(body));
     const mailtoLink = `mailto:${encodeURIComponent(row.email)}?subject=${encodedSubject}&body=${encodedBody}`;
     window.location.href = mailtoLink;
-    updateComposer(rowKey, (prev) => ({ ...prev, notice: "Opened your default email client.", error: null }));
     void saveBulkOutreachRecord(row, subject, body, type);
   }
 
@@ -644,9 +643,9 @@ export default function LeadsPage() {
                                 <a
                                   href={`mailto:${row.email}`}
                                   className="p-1.5 rounded-md text-ink-500 hover:bg-surface-100 hover:text-ink-700"
-                                  title="Open in Mail"
+                                  title="Open in Email"
                                 >
-                                  <Mail className="w-4 h-4" />
+                                  <ExternalLink className="w-4 h-4" />
                                 </a>
                               </div>
                             </td>
@@ -754,8 +753,8 @@ export default function LeadsPage() {
                                       onClick={() => handleOpenManual(row)}
                                       disabled={!composer.subject.trim() || !composer.body.trim()}
                                     >
-                                      <Mail className="w-4 h-4" />
-                                      Open in Mail
+                                      <ExternalLink className="w-4 h-4" />
+                                      Open in Email
                                     </button>
 
                                     {composer.error && <p className="text-sm text-red-600">{composer.error}</p>}

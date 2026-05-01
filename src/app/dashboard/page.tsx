@@ -8,10 +8,9 @@ import { createClient } from "@/lib/supabase/client";
 import { fireSignupConversion } from "@/lib/gtag";
 import {
   ArrowRight,
-  Check,
   ChevronDown,
+  ExternalLink,
   Loader2,
-  Mail,
   Search,
   Sparkles,
 } from "lucide-react";
@@ -66,8 +65,6 @@ type RowComposerState = {
   generating: boolean;
   error: string | null;
   notice: string | null;
-  postSendSuccess: boolean;
-  sentToEmail: string | null;
 };
 
 function defaultComposer(): RowComposerState {
@@ -81,8 +78,6 @@ function defaultComposer(): RowComposerState {
     generating: false,
     error: null,
     notice: null,
-    postSendSuccess: false,
-    sentToEmail: null,
   };
 }
 
@@ -138,7 +133,6 @@ export default function DashboardPage() {
   const [prospectError, setProspectError] = useState<string | null>(null);
   const [prospectResult, setProspectResult] = useState<BulkPayload | null>(null);
   const [rowComposers, setRowComposers] = useState<Record<string, RowComposerState>>({});
-  const [sessionSentRowKeys, setSessionSentRowKeys] = useState<Record<string, boolean>>({});
   const [creditsExhaustedModalOpen, setCreditsExhaustedModalOpen] = useState(false);
   const [usageStatsForModal, setUsageStatsForModal] = useState<{ prospects: number; sent: number } | null>(null);
   const searchSectionRef = useRef<HTMLDivElement>(null);
@@ -195,38 +189,17 @@ export default function DashboardPage() {
     setRowComposers((prev) => {
       const next: Record<string, RowComposerState> = {};
       for (const [k, v] of Object.entries(prev)) {
-        next[k] = { ...v, open: false, postSendSuccess: false, sentToEmail: null };
+        next[k] = { ...v, open: false };
       }
       const current = prev[rowKey] ?? defaultComposer();
       next[rowKey] = {
         ...current,
         open: true,
-        postSendSuccess: false,
-        sentToEmail: null,
         error: null,
         notice: null,
       };
       return next;
     });
-  }
-
-  function scrollToSearchAndFocus() {
-    searchSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    setTimeout(() => queryInputRef.current?.focus(), 400);
-  }
-
-  function openNextUnsentProspect(currentKey: string) {
-    if (!prospectResult?.leads.length) return;
-    const keys = prospectResult.leads.map((r) => rowKeyFor(r));
-    const idx = keys.indexOf(currentKey);
-    for (let i = idx + 1; i < keys.length; i++) {
-      const k = keys[i];
-      if (!sessionSentRowKeys[k]) {
-        openComposerForRow(k);
-        return;
-      }
-    }
-    scrollToSearchAndFocus();
   }
 
   async function openCreditsExhaustedModal() {
@@ -256,7 +229,6 @@ export default function DashboardPage() {
     setProspectError(null);
     setProspectResult(null);
     setRowComposers({});
-    setSessionSentRowKeys({});
     setProcessingCounter(0);
     setProgress("Searching for prospects...");
     const timerA = setTimeout(() => setProgress("Found companies. Extracting emails..."), 2000);
@@ -359,13 +331,6 @@ export default function DashboardPage() {
     const encodedSubject = encodeURIComponent(composer.subject.trim());
     const encodedBody = encodeURIComponent(withSignature(composer.body.trim()));
     window.location.href = `mailto:${encodeURIComponent(row.email)}?subject=${encodedSubject}&body=${encodedBody}`;
-    setSessionSentRowKeys((prev) => ({ ...prev, [key]: true }));
-    updateComposer(key, (prev) => ({
-      ...prev,
-      notice: null,
-      postSendSuccess: true,
-      sentToEmail: row.email,
-    }));
   }
 
   function sourceUrlLabel(url: string): string {
@@ -377,38 +342,7 @@ export default function DashboardPage() {
   }
 
   function prospectComposerCardBody(row: ProspectLead, key: string, composer: RowComposerState) {
-    return composer.postSendSuccess && composer.sentToEmail ? (
-      <div className="space-y-4 py-2">
-        <div className="flex items-start gap-2 text-emerald-800">
-          <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600" strokeWidth={2.5} />
-          <div className="min-w-0">
-            <p className="text-base font-bold text-emerald-900">Email sent to {composer.sentToEmail}</p>
-            <p className="mt-2 text-sm font-semibold text-ink-800">What&apos;s next?</p>
-          </div>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            className="btn-primary inline-flex w-full flex-1 items-center justify-center gap-1 text-sm sm:w-auto"
-            onClick={() => openNextUnsentProspect(key)}
-          >
-            Send to next prospect
-            <ArrowRight className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            className="btn-secondary inline-flex w-full flex-1 items-center justify-center gap-1 text-sm sm:w-auto"
-            onClick={() => {
-              updateComposer(key, (prev) => ({ ...prev, open: false, postSendSuccess: false, sentToEmail: null }));
-              scrollToSearchAndFocus();
-            }}
-          >
-            Find more leads
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    ) : (
+    return (
       <>
         <div className="text-sm text-ink-700">
           <span className="font-medium">To:</span> <span className="break-all">{row.email}</span>
@@ -441,12 +375,12 @@ export default function DashboardPage() {
             onClick={() => openInMail(row)}
             disabled={!composer.subject.trim() || !composer.body.trim()}
           >
-            <Mail className="h-4 w-4 flex-shrink-0" />
-            Send Email
+            <ExternalLink className="h-4 w-4 flex-shrink-0" />
+            Open in Email
           </button>
         </div>
         {composer.error && <p className="text-sm text-red-600">{composer.error}</p>}
-        {composer.notice && !composer.postSendSuccess && <p className="text-sm text-emerald-700">{composer.notice}</p>}
+        {composer.notice && <p className="text-sm text-emerald-700">{composer.notice}</p>}
       </>
     );
   }
@@ -616,7 +550,6 @@ export default function DashboardPage() {
               {prospectResult.leads.map((row) => {
                 const key = rowKeyFor(row);
                 const composer = rowComposers[key] ?? defaultComposer();
-                const sent = !!sessionSentRowKeys[key];
                 return (
                   <div key={key} className="flex min-w-0 flex-col gap-3">
                     <div className="min-w-0 rounded-xl border border-surface-200 bg-white p-4 shadow-sm">
@@ -631,30 +564,22 @@ export default function DashboardPage() {
                         {sourceUrlLabel(row.source_url)}
                       </a>
                       <div className="mt-4">
-                        {sent ? (
-                          <span className="flex w-full items-center justify-center rounded-lg bg-surface-100 py-3 text-sm font-medium text-ink-500">
-                            ✓ Sent
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="flex w-full items-center justify-center rounded-lg bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
-                            onClick={() => {
-                              if (composer.open) {
-                                updateComposer(key, (prev) => ({
-                                  ...prev,
-                                  open: false,
-                                  postSendSuccess: false,
-                                  sentToEmail: null,
-                                }));
-                              } else {
-                                openComposerForRow(key);
-                              }
-                            }}
-                          >
-                            {composer.open ? "Close" : "Write →"}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-center rounded-lg bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+                          onClick={() => {
+                            if (composer.open) {
+                              updateComposer(key, (prev) => ({
+                                ...prev,
+                                open: false,
+                              }));
+                            } else {
+                              openComposerForRow(key);
+                            }
+                          }}
+                        >
+                          {composer.open ? "Close" : "Write →"}
+                        </button>
                       </div>
                     </div>
                     {composer.open && (
@@ -684,7 +609,6 @@ export default function DashboardPage() {
                 {prospectResult.leads.map((row) => {
                   const key = rowKeyFor(row);
                   const composer = rowComposers[key] ?? defaultComposer();
-                  const sent = !!sessionSentRowKeys[key];
                   return (
                     <Fragment key={key}>
                       <tr className="border-b border-surface-100">
@@ -696,30 +620,22 @@ export default function DashboardPage() {
                           </a>
                         </td>
                         <td className="py-2">
-                          {sent ? (
-                            <span className="inline-flex items-center rounded-md bg-surface-100 px-3 py-2 text-xs font-medium text-ink-500">
-                              ✓ Sent
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              className="inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
-                              onClick={() => {
-                                if (composer.open) {
-                                  updateComposer(key, (prev) => ({
-                                    ...prev,
-                                    open: false,
-                                    postSendSuccess: false,
-                                    sentToEmail: null,
-                                  }));
-                                } else {
-                                  openComposerForRow(key);
-                                }
-                              }}
-                            >
-                              {composer.open ? "Close" : "Write →"}
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
+                            onClick={() => {
+                              if (composer.open) {
+                                updateComposer(key, (prev) => ({
+                                  ...prev,
+                                  open: false,
+                                }));
+                              } else {
+                                openComposerForRow(key);
+                              }
+                            }}
+                          >
+                            {composer.open ? "Close" : "Write →"}
+                          </button>
                         </td>
                       </tr>
                       <tr className="border-b border-surface-100">
