@@ -252,7 +252,7 @@ export default function LandingPage() {
                 <ul className="space-y-3 mb-8 flex-1">
                   {(plan.type === "pro"
                     ? [
-                        "150 credits per month",
+                        "200 credits per month",
                         "AI-powered customer discovery",
                         "AI email writing",
                         "Email sending via mailto",
@@ -260,7 +260,7 @@ export default function LandingPage() {
                         "Priority support",
                       ]
                     : [
-                        "500 credits per month",
+                        "700 credits per month",
                         "Everything in Pro",
                         "Higher volume searches",
                         "Priority support",

@@ -1,5 +1,19 @@
 export type PaidPlan = "pro" | "agency";
 
+/** One-time Lemon Squeezy packs (separate variants from subscription). */
+export type OnetimePack = "starter" | "growth" | "bulk";
+
+export function getOnetimeVariantId(pack: OnetimePack): string | undefined {
+  const raw =
+    pack === "starter"
+      ? process.env.LEMONSQUEEZY_ONETIME_STARTER_VARIANT_ID
+      : pack === "growth"
+        ? process.env.LEMONSQUEEZY_ONETIME_GROWTH_VARIANT_ID
+        : process.env.LEMONSQUEEZY_ONETIME_BULK_VARIANT_ID;
+  const trimmed = raw?.trim();
+  return trimmed || undefined;
+}
+
 export function getVariantIdForPlan(plan: PaidPlan): string | undefined {
   const id =
     plan === "pro"

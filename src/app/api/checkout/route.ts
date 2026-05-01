@@ -2,14 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   createLemonCheckout,
+  getOnetimeVariantId,
   getVariantIdForPlan,
+  type OnetimePack,
   type PaidPlan,
 } from "@/lib/lemonsqueezy";
 
 const PAID_PLANS: PaidPlan[] = ["pro", "agency"];
+const ONETIME_PACKS: OnetimePack[] = ["starter", "growth", "bulk"];
 
 function isPaidPlan(p: string): p is PaidPlan {
   return PAID_PLANS.includes(p as PaidPlan);
+}
+
+function isOnetimePack(p: string): p is OnetimePack {
+  return ONETIME_PACKS.includes(p as OnetimePack);
 }
 
 export async function POST(request: NextRequest) {
@@ -34,19 +41,29 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const plan = body?.plan;
+    const onetime = body?.onetime;
 
-    if (!plan || typeof plan !== "string" || !isPaidPlan(plan)) {
+    const hasPlan = plan && typeof plan === "string" && isPaidPlan(plan);
+    const hasOnetime = onetime && typeof onetime === "string" && isOnetimePack(onetime);
+
+    if (hasPlan === hasOnetime) {
       return NextResponse.json(
-        { error: "Invalid plan. Use pro or agency." },
+        { error: "Send exactly one of: { plan: \"pro\" | \"agency\" } (subscription) or { onetime: \"starter\" | \"growth\" | \"bulk\" } (one-time)." },
         { status: 400 }
       );
     }
 
-    const variantId = getVariantIdForPlan(plan);
+    const variantId = hasOnetime
+      ? getOnetimeVariantId(onetime)
+      : hasPlan
+        ? getVariantIdForPlan(plan)
+        : undefined;
     if (!variantId) {
       return NextResponse.json(
         {
-          error: `Missing environment variable for ${plan} variant (e.g. LEMONSQUEEZY_${plan.toUpperCase()}_VARIANT_ID).`,
+          error: hasOnetime
+            ? `Missing one-time variant env for "${onetime}" (e.g. LEMONSQUEEZY_ONETIME_${String(onetime).toUpperCase()}_VARIANT_ID).`
+            : `Missing environment variable for ${plan} variant (e.g. LEMONSQUEEZY_${String(plan).toUpperCase()}_VARIANT_ID).`,
         },
         { status: 503 }
       );

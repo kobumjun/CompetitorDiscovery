@@ -165,8 +165,8 @@ export interface Outreach {
 }
 
 export const PLAN_MONTHLY_CREDITS = {
-  pro: 150,
-  agency: 500,
+  pro: 200,
+  agency: 700,
 } as const;
 
 export function planIncludedCredits(plan: PlanType): number {
@@ -197,11 +197,11 @@ export const PLANS: PlanConfig[] = [
     type: "pro",
     price: 19,
     credits: PLAN_MONTHLY_CREDITS.pro,
-    pricePerCredit: "$0.13",
+    pricePerCredit: "$0.095",
     popular: true,
     variantIdEnvKey: "LEMONSQUEEZY_PRO_VARIANT_ID",
     features: [
-      "150 credits / month",
+      "200 credits / month",
       "AI proposal generation (GPT-4o)",
       "Unlimited clients",
       "Electronic signatures",
@@ -216,10 +216,10 @@ export const PLANS: PlanConfig[] = [
     type: "agency",
     price: 49,
     credits: PLAN_MONTHLY_CREDITS.agency,
-    pricePerCredit: "$0.10",
+    pricePerCredit: "$0.07",
     variantIdEnvKey: "LEMONSQUEEZY_AGENCY_VARIANT_ID",
     features: [
-      "500 credits / month",
+      "700 credits / month",
       "Everything in Pro",
       "Priority AI generation",
       "Custom templates library",

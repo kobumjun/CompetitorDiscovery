@@ -5,9 +5,11 @@ import Link from "next/link";
 import { Check, CreditCard, ExternalLink, HelpCircle, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { ONE_TIME_PACKS } from "@/config/pricing-one-time-packs";
 import { PLANS, planIncludedCredits, type User } from "@/types";
-import type { PaidPlan } from "@/lib/lemonsqueezy";
+import type { OnetimePack, PaidPlan } from "@/lib/lemonsqueezy";
 import { PlanCheckoutButton } from "@/components/plan-checkout-button";
+import { OnetimeCheckoutButton } from "@/components/onetime-checkout-button";
 import { SiteFooter } from "@/components/site-footer";
 
 const FREE_FEATURES = [
@@ -15,22 +17,6 @@ const FREE_FEATURES = [
   "AI-powered customer discovery",
   "AI email writing",
   "Email sending via mailto",
-];
-
-const PRO_FEATURES = [
-  "150 credits per month",
-  "AI-powered customer discovery",
-  "AI email writing",
-  "Email sending via mailto",
-  "Bulk URL extraction",
-  "Priority support",
-];
-
-const AGENCY_FEATURES = [
-  "500 credits per month",
-  "Everything in Pro",
-  "Higher volume searches",
-  "Priority support",
 ];
 
 const FAQS = [
@@ -44,11 +30,14 @@ const FAQS = [
   },
 ];
 
+type BillingTab = "onetime" | "subscription";
+
 export default function PricingClientPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalError, setPortalError] = useState("");
+  const [billingTab, setBillingTab] = useState<BillingTab>("onetime");
 
   useEffect(() => {
     async function bootstrap() {
@@ -97,6 +86,38 @@ export default function PricingClientPage() {
         <div className="mx-auto max-w-3xl px-6">
           <h1 className="mb-3 text-display-lg font-black text-ink-900">Choose Your Plan</h1>
           <p className="text-lg text-ink-500">Get more credits to find leads and send emails</p>
+          <div className="mx-auto mt-8 flex max-w-md justify-center px-1">
+            <div
+              className="inline-flex w-full rounded-full border border-surface-200 bg-white p-1 shadow-sm sm:w-auto"
+              role="tablist"
+              aria-label="Billing type"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={billingTab === "onetime"}
+                className={cn(
+                  "min-h-[44px] flex-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors sm:flex-none sm:px-8",
+                  billingTab === "onetime" ? "bg-brand-500 text-white" : "bg-white text-ink-500"
+                )}
+                onClick={() => setBillingTab("onetime")}
+              >
+                One-time
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={billingTab === "subscription"}
+                className={cn(
+                  "min-h-[44px] flex-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors sm:flex-none sm:px-8",
+                  billingTab === "subscription" ? "bg-brand-500 text-white" : "bg-white text-ink-500"
+                )}
+                onClick={() => setBillingTab("subscription")}
+              >
+                Subscription
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -115,76 +136,117 @@ export default function PricingClientPage() {
             </div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-3">
-            <div className={cn("card flex flex-col p-6", user?.plan === "free" && "border-2 border-brand-500 shadow-elevated")}>
-              {user?.plan === "free" && (
-                <div className="mb-3 inline-flex w-fit rounded-full bg-brand-500 px-2.5 py-0.5 text-xs font-bold text-white">
-                  Current Plan
-                </div>
-              )}
-              <h3 className="text-lg font-bold text-ink-900">Free</h3>
-              <div className="mt-2">
-                <span className="text-4xl font-black text-ink-900">$0</span>
-                <span className="text-sm text-ink-400">/mo</span>
-              </div>
-              <p className="mt-1 text-sm text-ink-500">5 credits</p>
-              <ul className="mb-8 mt-6 flex-1 space-y-3">
-                {FREE_FEATURES.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
-                    <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-500" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <button className="btn-secondary w-full text-center" disabled>
-                {user?.plan === "free" ? "Current Plan" : "Free Plan"}
-              </button>
-            </div>
-
-            {PLANS.map((plan) => {
-              const isCurrent = user?.plan === plan.type;
-              const isPopular = plan.type === "pro";
-              const featureList = plan.type === "pro" ? PRO_FEATURES : AGENCY_FEATURES;
-              return (
-                <div key={plan.type} className={cn("card relative flex flex-col p-6", isCurrent && "border-2 border-brand-500 shadow-elevated")}>
-                  {isCurrent ? (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-500 px-3 py-0.5 text-xs font-bold text-white">
-                      Current Plan
-                    </div>
-                  ) : isPopular ? (
+          {billingTab === "onetime" && (
+            <div className="grid gap-6 md:grid-cols-3">
+              {ONE_TIME_PACKS.map((pack) => (
+                <div key={pack.id} className={cn("card relative flex flex-col p-6", pack.badge === "popular" && "border-2 border-brand-500 shadow-elevated")}>
+                  {pack.badge === "popular" && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-500 px-3 py-0.5 text-xs font-bold text-white">
                       Most Popular
                     </div>
-                  ) : (
+                  )}
+                  {pack.badge === "best" && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-0.5 text-xs font-bold text-white">
                       Best Value
                     </div>
                   )}
-                  <h3 className="text-lg font-bold text-ink-900">{plan.name}</h3>
+                  <h3 className="text-lg font-bold text-ink-900">{pack.name}</h3>
                   <div className="mt-2">
-                    <span className="text-4xl font-black text-ink-900">${plan.price}</span>
-                    <span className="text-sm text-ink-400">/mo</span>
+                    <span className="text-4xl font-black text-ink-900">${pack.priceUsd}</span>
                   </div>
-                  <p className="mt-1 text-sm text-ink-500">{plan.credits} credits</p>
+                  <p className="mt-1 text-sm text-ink-500">
+                    {pack.credits} credits · {pack.pricePerCreditLabel}
+                  </p>
                   <ul className="mb-8 mt-6 flex-1 space-y-3">
-                    {featureList.map((f) => (
+                    {pack.features.map((f) => (
                       <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
                         <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-500" />
                         {f}
                       </li>
                     ))}
                   </ul>
-                  {isCurrent ? (
-                    <button className="btn-secondary w-full text-center" disabled>
-                      Current Plan
-                    </button>
-                  ) : (
-                    <PlanCheckoutButton plan={plan.type as PaidPlan} popular={plan.popular} />
-                  )}
+                  <OnetimeCheckoutButton pack={pack.id as OnetimePack} popular={pack.badge === "popular"} />
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {billingTab === "subscription" && (
+            <>
+              <div className="grid gap-6 md:grid-cols-3">
+                <div className={cn("card flex flex-col p-6", user?.plan === "free" && "border-2 border-brand-500 shadow-elevated")}>
+                  {user?.plan === "free" && (
+                    <div className="mb-3 inline-flex w-fit rounded-full bg-brand-500 px-2.5 py-0.5 text-xs font-bold text-white">
+                      Current Plan
+                    </div>
+                  )}
+                  <h3 className="text-lg font-bold text-ink-900">Free</h3>
+                  <div className="mt-2">
+                    <span className="text-4xl font-black text-ink-900">$0</span>
+                    <span className="text-sm text-ink-400">/mo</span>
+                  </div>
+                  <p className="mt-1 text-sm text-ink-500">5 credits</p>
+                  <ul className="mb-8 mt-6 flex-1 space-y-3">
+                    {FREE_FEATURES.map((f) => (
+                      <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
+                        <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-500" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button className="btn-secondary w-full text-center" disabled>
+                    {user?.plan === "free" ? "Current Plan" : "Free Plan"}
+                  </button>
+                </div>
+
+                {PLANS.map((plan) => {
+                  const isCurrent = user?.plan === plan.type;
+                  const isPopular = plan.type === "pro";
+                  return (
+                    <div key={plan.type} className={cn("card relative flex flex-col p-6", isCurrent && "border-2 border-brand-500 shadow-elevated")}>
+                      {isCurrent ? (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-500 px-3 py-0.5 text-xs font-bold text-white">
+                          Current Plan
+                        </div>
+                      ) : isPopular ? (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-500 px-3 py-0.5 text-xs font-bold text-white">
+                          Most Popular
+                        </div>
+                      ) : (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-0.5 text-xs font-bold text-white">
+                          Best Value
+                        </div>
+                      )}
+                      <h3 className="text-lg font-bold text-ink-900">{plan.name}</h3>
+                      <div className="mt-2">
+                        <span className="text-4xl font-black text-ink-900">${plan.price}</span>
+                        <span className="text-sm text-ink-400">/mo</span>
+                      </div>
+                      <p className="mt-1 text-sm text-ink-500">{plan.credits} credits per month</p>
+                      <ul className="mb-8 mt-6 flex-1 space-y-3">
+                        {plan.features.map((f) => (
+                          <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">
+                            <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-500" />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                      {isCurrent ? (
+                        <button className="btn-secondary w-full text-center" disabled>
+                          Current Plan
+                        </button>
+                      ) : (
+                        <PlanCheckoutButton plan={plan.type as PaidPlan} popular={plan.popular} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-8 text-center text-sm font-medium text-ink-600">
+                Save up to 40% compared to one-time purchases with a subscription
+              </p>
+            </>
+          )}
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4 text-sm">
             <button onClick={handleManageSubscription} disabled={portalLoading} className="btn-secondary inline-flex items-center gap-2">

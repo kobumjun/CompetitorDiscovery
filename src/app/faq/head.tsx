@@ -31,7 +31,7 @@ const faqSchema = {
       name: "How much does ProposalPilot cost?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Free tier includes 5 credits. Pro plan is $19/month with 150 credits. Agency plan is $49/month with 500 credits. Each AI-generated proposal costs 1 credit. Manual writing is always free.",
+        text: "Free tier includes 5 credits. Pro plan is $19/month with 200 credits. Agency plan is $49/month with 700 credits. Each AI-generated proposal costs 1 credit. Manual writing is always free.",
       },
     },
     {

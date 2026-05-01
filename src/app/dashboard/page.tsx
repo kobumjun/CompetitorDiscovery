@@ -765,7 +765,7 @@ export default function DashboardPage() {
             )}
             {usageStatsForModal === null && <Loader2 className="h-5 w-5 animate-spin text-brand-500" />}
             <p className="text-sm text-ink-600">
-              Upgrade to Pro to get 150 credits every month and keep growing.
+              Upgrade to Pro to get 200 credits every month and keep growing.
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button type="button" className="btn-ghost order-2 sm:order-1" onClick={() => setCreditsExhaustedModalOpen(false)}>
