@@ -2,32 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { reserveCredits, refundCredits } from "@/lib/credits";
 import { deriveCompanyNameFromHost, extractWebsiteEmails, normalizeUrl } from "@/lib/leads/extraction";
+import {
+  isBlockedHost,
+  isGlobalTimeoutReached,
+  normalizeDomain,
+} from "@/lib/search-prospects-crawl-utils";
 
 export const maxDuration = 60;
 
 const SERPER_ENDPOINT = "https://google.serper.dev/search";
-/** Per-path HTTP fetch inside `extractWebsiteEmails` (paths run in parallel per site). */
-const CRAWL_FETCH_TIMEOUT_MS = 5000;
-/** Concurrent prospect URLs per crawl batch (`Promise.allSettled`). */
-const CRAWL_PARALLEL_BATCH = 4;
-/** Hard cap for entire POST (planner + Serper + crawl + inserts); stay under `maxDuration`. */
-const OVERALL_TIMEOUT_MS = 58_000;
-/** Upper bound for one prospect `extractWebsiteEmails` (parallel paths; avoids stuck Promise.all). */
-const SITE_EXTRACT_HARD_MS = 20_000;
+/** Entire API (auth → insert) must finish before this wall time (Vercel 60s − margin). */
+const GLOBAL_API_MAX_MS = 45_000;
+/** Per-path HTTP fetch inside `extractWebsiteEmails` (paths use `Promise.allSettled`). */
+const CRAWL_FETCH_TIMEOUT_MS = 7000;
+/** Concurrent prospect base URLs per crawl batch. */
+const CRAWL_PARALLEL_BATCH = 3;
+/** Upper bound for one prospect `extractWebsiteEmails` (parallel path fetches). */
+const SITE_EXTRACT_HARD_MS = 22_000;
 const MAX_SERPER_URLS = 20;
 const SEARCH_EXTRACT_PATHS = ["", "/contact", "/about"];
-
-const BLOCKED_HOSTS = [
-  "g2.com", "capterra.com", "techcrunch.com", "forbes.com",
-  "facebook.com", "linkedin.com", "youtube.com", "wikipedia.org",
-  "quora.com", "producthunt.com", "trustpilot.com", "glassdoor.com",
-  "crunchbase.com", "ycombinator.com", "instagram.com", "x.com",
-  "twitter.com", "tiktok.com", "reddit.com", "medium.com",
-  "yelp.com", "bbb.org", "yellowpages.com", "mapquest.com",
-  "tripadvisor.com", "amazon.com", "ebay.com", "apple.com",
-  "google.com", "microsoft.com", "github.com", "stackoverflow.com",
-  "indeed.com", "ziprecruiter.com",
-];
 
 type SerperOrganicResult = { link?: string; title?: string; snippet?: string };
 type SerperResponse = { organic?: SerperOrganicResult[] };
@@ -35,15 +28,23 @@ type ExtractedProspectRow = { email: string; source_url: string; company_name: s
 const SERPER_NUM_RESULTS = 10;
 const GPT_TIMEOUT_MS = 4000;
 
-const SELLER_TO_BUYER_SYSTEM_PROMPT = `The user describes what they sell.
-Do two things:
+const SELLER_TO_BUYER_SYSTEM_PROMPT = `You help with PROSPECT DISCOVERY (finding companies that might BUY the user's offering), NOT competitor discovery.
 
-1. Return exactly 2 Google search queries to find businesses that would BUY this.
-   Each query targets a DIFFERENT buyer type.
-   Format: "[specific buyer industry] contact email"
-   IMPORTANT: queries must NOT contain words from what the user sells.
+The user describes a product or service they sell (often B2B SaaS, software, or professional services).
 
-2. Return competitor keywords (words that identify companies selling the same thing as the user).
+## Task 1 — Exactly 2 Google search queries
+Each query must surface **small and mid-sized buyers**: agencies, consultants, startups, SMBs, local businesses, professional firms, service providers — people likely to **purchase** tools/services like the user's.
+
+Rules for queries:
+- Focus on **who would buy**, not who sells the same thing. Do NOT write queries meant to find big vendors, marketplaces, review sites, or "alternatives to X" listicles.
+- Each query should target a **different buyer angle** (e.g. agencies vs local professional firms).
+- Prefer natural English that includes **1–3** of: "contact email", "official website", "company", "firm", "agency", "consulting", "services" (mix as reads well).
+- If the offer looks like **software or B2B SaaS**, bias toward buyers such as: marketing agencies, sales agencies, boutique consultancies, independent consultants, startups, small businesses, professional service firms — not OpenAI, Canva, Atlassian-style giants.
+- Do **not** paste the user's exact product name into queries if it would pull giant platforms or generic software hubs; use **buyer-type + industry + intent** instead (you may use short generic category words).
+
+## Task 2 — competitor_keywords (3–8 short strings)
+These are words/phrases that identify **competing products or same-space platforms** (used only to FILTER OUT noisy organic results whose title or URL is clearly about a competitor or directory, NOT to find prospects).
+Examples: product names, "reviews", "alternative to", well-known tool names in that space. Keep them short and lowercase.
 
 Return ONLY this JSON:
 {
@@ -52,14 +53,9 @@ Return ONLY this JSON:
 }
 
 Examples:
-- "coffee machines" → {"queries":["cafes and coffee shops contact email","hotel restaurants contact email"],"competitor_keywords":["coffee machine","espresso","vending"]}
-- "web design" → {"queries":["dental clinics contact email","law firms contact email"],"competitor_keywords":["web design","web agency","digital agency","website builder"]}
-- "accounting services" → {"queries":["small construction companies contact email","freelance contractors contact email"],"competitor_keywords":["accounting","bookkeeping","CPA firm","tax services"]}
-- "Japanese language learning product" → {"queries":["international schools contact email","corporate language training departments contact email"],"competitor_keywords":["language learning","language school","Japanese course","language app"]}
-- "fitness coaching" → {"queries":["corporate HR wellness programs contact email","physical therapy clinics contact email"],"competitor_keywords":["fitness coach","personal trainer","gym","fitness program"]}
-- "dental equipment" → {"queries":["dental clinics contact email","orthodontist offices contact email"],"competitor_keywords":["dental equipment","dental supply","dental tools"]}
-- "marketing services" → {"queries":["plumbing companies contact email","auto repair shops contact email"],"competitor_keywords":["marketing agency","digital marketing","SEO agency","advertising"]}
-- "office furniture" → {"queries":["coworking spaces contact email","startup offices contact email"],"competitor_keywords":["office furniture","desk supplier","chair manufacturer"]}
+- User: "cold email automation software" → {"queries":["boutique sales agencies company contact email","independent marketing consultants firm official website"],"competitor_keywords":["lemlist","instantly","apollo","g2","capterra","software reviews"]}
+- User: "web design services" → {"queries":["dental practice website company contact email","local law firm official site services"],"competitor_keywords":["squarespace","wix","webflow","website builder"]}
+- User: "coffee machines" → {"queries":["independent cafes contact email","small hotel restaurant company official website"],"competitor_keywords":["nespresso","bunn","coffee wholesale"]}
 
 No explanation. Return ONLY the JSON.`;
 
@@ -71,7 +67,6 @@ function cleanJsonFence(text: string): string {
   return text.replace(/```json\n?/gi, "").replace(/```/g, "").trim();
 }
 
-/** One representative email per site: prefer business-facing roles over generic. */
 const EMAIL_PREFIX_PRIORITY = [
   "partnership",
   "partnerships",
@@ -140,14 +135,6 @@ function stripLineNoise(line: string) {
     .trim();
 }
 
-function hostOfLink(link: string | undefined): string | null {
-  if (!link?.trim()) return null;
-  const key = normalizedSerperLink(link);
-  if (!key) return null;
-  const host = normalizeUrl(key)?.hostname.replace(/^www\./, "").toLowerCase();
-  return host || null;
-}
-
 function parsePlannerOutput(text: string): { queries: string[]; competitorKeywords: string[] } {
   const raw = cleanJsonFence(text);
   let queries: string[] = [];
@@ -175,7 +162,19 @@ async function buildBuyerQueriesAndCompetitorsFromGpt(cleaned: string): Promise<
   let queries: string[] = [];
   let competitorKeywords: string[] = [];
   const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) return { queries: [`businesses that need ${cleaned} contact email`], competitorKeywords: [] };
+  if (!openaiKey) {
+    return {
+      queries: [
+        "boutique marketing agencies company official website contact email",
+        "independent professional services firms contact email",
+      ],
+      competitorKeywords: cleaned
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2)
+        .slice(0, 8),
+    };
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GPT_TIMEOUT_MS);
@@ -201,7 +200,17 @@ async function buildBuyerQueriesAndCompetitorsFromGpt(cleaned: string): Promise<
 
     if (!response.ok) {
       console.warn("[search-prospects] OpenAI HTTP", response.status);
-      return { queries: [`businesses that need ${cleaned} contact email`], competitorKeywords: [] };
+      return {
+        queries: [
+          "SMB agencies consulting firm official site contact email",
+          "local service companies professional firm contact email",
+        ],
+        competitorKeywords: cleaned
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 2)
+          .slice(0, 8),
+      };
     }
 
     const gptData = (await response.json()) as { choices?: { message?: { content?: string } }[] };
@@ -219,13 +228,12 @@ async function buildBuyerQueriesAndCompetitorsFromGpt(cleaned: string): Promise<
   }
 
   if (queries.length === 0) {
-    queries = [`businesses that need ${cleaned} contact email`];
+    queries = [
+      "boutique agencies and consultants official website contact email",
+      "small professional services companies firm contact email",
+    ];
   }
   return { queries, competitorKeywords };
-}
-
-function isBlockedHost(hostname: string) {
-  return BLOCKED_HOSTS.some((b) => hostname === b || hostname.endsWith(`.${b}`));
 }
 
 function normalizedSerperLink(link: string): string | null {
@@ -233,6 +241,164 @@ function normalizedSerperLink(link: string): string | null {
   if (!trimmed) return null;
   const nu = normalizeUrl(trimmed);
   return nu ? nu.toString() : null;
+}
+
+/** Title/snippet/link patterns typical of help centers, communities, docs, marketplaces, social, review hubs — not buyer companies. */
+function shouldExcludeSerpNoiseResult(r: SerperOrganicResult): boolean {
+  const link = String(r.link ?? "").toLowerCase();
+  const title = String(r.title ?? "").toLowerCase();
+  const snippet = String(r.snippet ?? "").toLowerCase();
+  const blob = `${link} ${title} ${snippet}`;
+
+  const noiseHints = [
+    "help center",
+    "help centre",
+    "knowledge base",
+    "knowledgebase",
+    "developer hub",
+    "community forum",
+    " community ",
+    " forum ",
+    " discussion ",
+    " discussions ",
+    "documentation",
+    "/docs/",
+    "/documentation/",
+    "api reference",
+    "developer docs",
+    "stack overflow",
+    "stackoverflow.com",
+    "reddit.com",
+    "/r/",
+    "github.com",
+    "gist.github",
+    "product hunt",
+    "producthunt.com",
+    "g2.com",
+    "capterra",
+    "trustpilot",
+    "glassdoor",
+    "chrome web store",
+    "google workspace marketplace",
+    "appsumo",
+    "plugin for ",
+    " extension for ",
+    "integration for ",
+    "youtube.com",
+    "youtu.be",
+    "vimeo.com",
+    "twitter.com",
+    "facebook.com",
+    "linkedin.com/company",
+    "instagram.com",
+    "medium.com",
+    "substack.com",
+    "quora.com",
+    "slideshare",
+    "wikipedia.org",
+    "hackernoon",
+    "dev.to",
+    "/community/",
+    "/forum/",
+    "/discuss/",
+    "/reviews/",
+    "/marketplace/",
+    " alternatives ",
+    " vs ",
+    " compare ",
+    " best tools",
+    " top 10",
+  ];
+  for (const h of noiseHints) {
+    if (blob.includes(h)) return true;
+  }
+
+  try {
+    const raw = String(r.link ?? "").trim();
+    const href = /^(https?:)?\/\//i.test(raw) ? raw : `https://${raw}`;
+    const u = new URL(href);
+    const path = u.pathname.toLowerCase();
+    const parts = path.split("/").filter(Boolean);
+    const p0 = parts[0] ?? "";
+    const badFirst = new Set([
+      "docs",
+      "documentation",
+      "support",
+      "help",
+      "community",
+      "forum",
+      "forums",
+      "discuss",
+      "discussion",
+      "blog",
+      "news",
+      "press",
+      "developers",
+      "developer",
+      "api",
+      "status",
+      "learn",
+      "training",
+      "academy",
+      "wiki",
+      "marketplace",
+      "plugins",
+      "apps",
+      "integrations",
+      "answers",
+      "questions",
+    ]);
+    if (p0 && badFirst.has(p0)) return true;
+    if (path.includes("/help/") || path.includes("/support/") || path.includes("/community/")) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+/** Prefer URLs that look like a company root or shallow corporate page, not deep product/wiki trees. */
+function isLikelyOfficialCompanySite(r: SerperOrganicResult): boolean {
+  const raw = String(r.link ?? "").trim();
+  if (!raw) return false;
+  try {
+    const href = /^(https?:)?\/\//i.test(raw) ? raw : `https://${raw}`;
+    const u = new URL(href);
+    const parts = u.pathname.split("/").filter(Boolean);
+    if (parts.length === 0) return true;
+    const p0 = parts[0]!.toLowerCase();
+    const badSingle = new Set([
+      "docs",
+      "documentation",
+      "support",
+      "help",
+      "community",
+      "forum",
+      "blog",
+      "news",
+      "press",
+      "developers",
+      "developer",
+      "api",
+      "status",
+      "learn",
+      "training",
+      "academy",
+      "wiki",
+      "marketplace",
+      "plugins",
+      "apps",
+      "integrations",
+    ]);
+    if (badSingle.has(p0)) return false;
+    if (parts.length === 1) return true;
+    if (parts.length === 2) {
+      const okFirst = new Set(["about", "contact", "team", "company", "services", "home", "en", "us"]);
+      return okFirst.has(p0);
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 function dedupeBlocklistOrganic(organic: SerperOrganicResult[]): SerperOrganicResult[] {
@@ -250,36 +416,17 @@ function dedupeBlocklistOrganic(organic: SerperOrganicResult[]): SerperOrganicRe
   return out;
 }
 
-function deprioritizeKnownHostSerpItems(organic: SerperOrganicResult[], knownHostnames: Set<string>): SerperOrganicResult[] {
-  if (knownHostnames.size === 0) return organic;
-  const a: SerperOrganicResult[] = [];
-  const b: SerperOrganicResult[] = [];
-  for (const it of organic) {
-    const h = hostOfLink(it.link);
-    if (h && knownHostnames.has(h)) b.push(it);
-    else a.push(it);
-  }
-  return [...a, ...b];
-}
-
 async function loadExistingEmails(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<Set<string>> {
   const existingEmails = new Set<string>();
   try {
-    const direct = await supabase
-      .from("extracted_leads")
-      .select("email")
-      .eq("user_id", userId);
+    const direct = await supabase.from("extracted_leads").select("email").eq("user_id", userId);
     if (!direct.error && Array.isArray(direct.data)) {
       for (const row of direct.data as Array<{ email?: string | null }>) {
         const e = row.email?.toLowerCase();
         if (e) existingEmails.add(e);
       }
     } else {
-      const fallback = await supabase
-        .from("extracted_leads")
-        .select("emails")
-        .eq("user_id", userId)
-        .limit(3000);
+      const fallback = await supabase.from("extracted_leads").select("emails").eq("user_id", userId).limit(3000);
       if (fallback.error) throw fallback.error;
       for (const row of (fallback.data ?? []) as Array<{ emails?: unknown }>) {
         const arr = row.emails;
@@ -319,9 +466,6 @@ type CrawlSingleResult =
   | { kind: "row"; row: ExtractedProspectRow }
   | { kind: "failure"; url: string; reason: string };
 
-/**
- * Fetch + parse one prospect URL (no shared mutable state). Caller merges into `emailSeen` in batch order.
- */
 async function crawlSingleUrlForRow(url: string): Promise<CrawlSingleResult> {
   const siteStart = Date.now();
   try {
@@ -358,16 +502,25 @@ async function crawlSingleUrlForRow(url: string): Promise<CrawlSingleResult> {
   }
 }
 
+function jsonSuccess(body: Record<string, unknown>, processStart: number): NextResponse {
+  console.log("[search-prospects] === DONE === elapsed:", Date.now() - processStart, "ms");
+  return NextResponse.json(body);
+}
+
 export async function POST(request: NextRequest) {
   let reservedCredits = 0;
   let userId = "";
+  const PROCESS_START = Date.now();
+
   try {
     console.log("[search-prospects] === START ===");
-    const PROCESS_START = Date.now();
 
-    // ── Auth ──
+    const isGlobalDeadline = () => isGlobalTimeoutReached(PROCESS_START, GLOBAL_API_MAX_MS);
+
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       console.log("[search-prospects] FAIL: No authenticated user");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -375,21 +528,18 @@ export async function POST(request: NextRequest) {
     userId = user.id;
     console.log("[search-prospects] Auth OK:", user.id);
 
-    // ── API key ──
     const apiKey = process.env.SERPER_API_KEY;
     console.log("[search-prospects] SERPER_API_KEY exists:", Boolean(apiKey), "length:", apiKey?.length ?? 0);
     if (!apiKey) {
       return NextResponse.json({ error: "Search service unavailable. SERPER_API_KEY not configured." }, { status: 503 });
     }
 
-    // ── Parse request ──
     const { query, requestedCount } = (await request.json()) as { query?: string; requestedCount?: number };
     console.log("[search-prospects] query:", query, "requestedCount:", requestedCount);
     if (!query || !query.trim()) {
       return NextResponse.json({ error: "Query is required." }, { status: 400 });
     }
 
-    // ── Reserve credits ──
     const targetCount = Math.min(10, Math.max(1, Math.round(requestedCount ?? 3)));
     let reserve: { success: boolean; remaining: number };
     try {
@@ -404,8 +554,6 @@ export async function POST(request: NextRequest) {
     }
     reservedCredits = targetCount;
 
-    const isTimedOut = () => Date.now() - PROCESS_START > OVERALL_TIMEOUT_MS;
-
     const keyword = query.trim();
     const cleaned = stripSellPrefixes(keyword) || keyword;
     const planner = await buildBuyerQueriesAndCompetitorsFromGpt(cleaned);
@@ -417,7 +565,6 @@ export async function POST(request: NextRequest) {
     const existingEmails = await loadExistingEmails(supabase, user.id);
     const emailSeen = new Set<string>(existingEmails);
 
-    // ── Serper: 2회 병렬 ──
     const serperPromises = queries.slice(0, 2).map((q) =>
       fetch(SERPER_ENDPOINT, {
         method: "POST",
@@ -426,23 +573,36 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ q, num: SERPER_NUM_RESULTS }),
-        signal: AbortSignal.timeout(3000),
-      })
-        .then(async (r) => (r.ok ? (await r.json().catch(() => ({ organic: [] })) as SerperResponse) : ({ organic: [] } as SerperResponse)))
-        .catch(() => ({} as SerperResponse))
+        signal: AbortSignal.timeout(8000),
+      }).then(async (r) =>
+        r.ok ? ((await r.json().catch(() => ({ organic: [] }))) as SerperResponse) : ({ organic: [] } as SerperResponse),
+      ),
     );
 
-    const serperResults = await Promise.all(serperPromises);
+    const serperSettled = await Promise.allSettled(serperPromises);
+    const serperResults: SerperResponse[] = serperSettled.map((s) =>
+      s.status === "fulfilled" ? s.value : ({ organic: [] } as SerperResponse),
+    );
 
     const allOrganic: SerperOrganicResult[] = [];
     const seenDomain = new Set<string>();
+    let serpSkippedNoise = 0;
+    let serpSkippedHomeShape = 0;
     for (const result of serperResults) {
       for (const item of result.organic || []) {
         if (!item.link) continue;
+        if (shouldExcludeSerpNoiseResult(item)) {
+          serpSkippedNoise += 1;
+          continue;
+        }
+        if (!isLikelyOfficialCompanySite(item)) {
+          serpSkippedHomeShape += 1;
+          continue;
+        }
         let domain: string;
         try {
           const u = new URL(
-            /^(https?:)?\/\//i.test(String(item.link)) ? String(item.link) : `https://${item.link}`
+            /^(https?:)?\/\//i.test(String(item.link)) ? String(item.link) : `https://${item.link}`,
           );
           domain = u.hostname.replace(/^www\./, "").toLowerCase();
         } catch {
@@ -455,11 +615,13 @@ export async function POST(request: NextRequest) {
       }
       if (allOrganic.length >= MAX_SERPER_URLS) break;
     }
-    console.log(`[Serper] 합산 ${allOrganic.length}개 (도메인 중복 제거)`);
+    console.log(
+      `[Serper] 합산 ${allOrganic.length}개 (도메인 중복 제거) noise제외:${serpSkippedNoise} 비기업URL형태제외:${serpSkippedHomeShape}`,
+    );
 
     const filtered = allOrganic.filter((result) => {
-      const titleAndLink = `${result.title || ""} ${result.link || ""}`.toLowerCase();
-      return !competitorKeywords.some((kw) => titleAndLink.includes(kw));
+      const blob = `${result.title || ""} ${result.snippet || ""} ${result.link || ""}`.toLowerCase();
+      return !competitorKeywords.some((kw) => kw.length > 0 && blob.includes(kw));
     });
     const candidates = filtered.length > 0 ? filtered : allOrganic;
     console.log(`[필터] ${allOrganic.length}개 → ${candidates.length}개`);
@@ -470,12 +632,18 @@ export async function POST(request: NextRequest) {
       const link = it.link;
       if (!link) continue;
       const n = normalizedSerperLink(link);
-      if (n) candidateUrls.push(n);
+      if (!n) continue;
+      const dom = normalizeDomain(n);
+      if (dom && isBlockedHost(dom)) continue;
+      candidateUrls.push(n);
     }
 
     console.log("[search-prospects] Crawl candidate URL count:", candidateUrls.length);
 
     if (candidateUrls.length === 0) {
+      const creditsRefunded = reservedCredits;
+      await refundCredits(user.id, creditsRefunded);
+      const finalCredits = reserve.remaining + creditsRefunded;
       console.log(
         "[search-prospects:metrics]",
         JSON.stringify({
@@ -485,14 +653,40 @@ export async function POST(request: NextRequest) {
           emailsInserted: 0,
           crawlFailures: 0,
           duplicatesSkipped: 0,
+          globalDeadlineHit: false,
           note: "no_crawl_candidates_after_filter",
         }),
       );
-      await refundCredits(user.id, reservedCredits);
-      return NextResponse.json({ error: "No companies found. Try broader keywords." }, { status: 404 });
+      return jsonSuccess(
+        {
+          success: true,
+          leads: [],
+          stats: {
+            newEmails: 0,
+            duplicatesSkipped: 0,
+            websitesCrawled: 0,
+            candidateUrlsTotal: 0,
+            creditsUsed: 0,
+            creditsRefunded,
+          },
+          generatedSearchQueries: queries,
+          duplicateLeads: [],
+          requestedCount: targetCount,
+          searchedCount: 0,
+          processedCount: 0,
+          successfulUrls: 0,
+          failedUrls: 0,
+          failed: [],
+          creditsReserved: reservedCredits,
+          creditsUsed: 0,
+          creditsRefunded,
+          creditsRemaining: finalCredits,
+          message: `No crawlable companies after filters — all ${targetCount} credits refunded.`,
+        },
+        PROCESS_START,
+      );
     }
 
-    // ── Batch crawl: parallel batches (Promise.allSettled), strict crawl deadline + per-fetch timeouts ──
     const crawlStart = Date.now();
     const newResultRows: ExtractedProspectRow[] = [];
     const dupResultRows: ExtractedProspectRow[] = [];
@@ -500,16 +694,12 @@ export async function POST(request: NextRequest) {
     let candidateIndex = 0;
     let batchN = 0;
     let skippedDups = 0;
-    let crawlStoppedForSafeDeadline = false;
+    let globalDeadlineHit = false;
 
-    crawlLoop: while (
-      newResultRows.length < targetCount &&
-      candidateIndex < candidateUrls.length &&
-      !isTimedOut()
-    ) {
-      if (Date.now() - PROCESS_START > 50000) {
-        crawlStoppedForSafeDeadline = true;
-        console.log("[search-prospects] 50초 안전 타임아웃 - 루프 중단");
+    crawlLoop: while (newResultRows.length < targetCount && candidateIndex < candidateUrls.length) {
+      if (isGlobalDeadline()) {
+        globalDeadlineHit = true;
+        console.log(`[search-prospects] ${GLOBAL_API_MAX_MS / 1000}s 글로벌 데드라인 – 루프 중단`);
         break;
       }
 
@@ -518,26 +708,28 @@ export async function POST(request: NextRequest) {
       batchN += 1;
       if (batch.length === 0) break;
 
-      if (Date.now() - PROCESS_START > 50000) {
-        crawlStoppedForSafeDeadline = true;
-        console.log("[search-prospects] 50초 안전 타임아웃 - 루프 중단");
+      if (isGlobalDeadline()) {
+        globalDeadlineHit = true;
+        console.log(`[search-prospects] ${GLOBAL_API_MAX_MS / 1000}s 글로벌 데드라인 – 루프 중단`);
         break;
       }
 
+      const batchWallT0 = Date.now();
       const settled = await Promise.allSettled(batch.map((url) => crawlSingleUrlForRow(url)));
 
       for (let i = 0; i < settled.length; i++) {
         const url = batch[i]!;
         if (newResultRows.length >= targetCount) break;
-        if (Date.now() - PROCESS_START > 50000) {
-          crawlStoppedForSafeDeadline = true;
-          console.log("[search-prospects] 50초 안전 타임아웃 - 루프 중단");
+        if (isGlobalDeadline()) {
+          globalDeadlineHit = true;
+          console.log(`[search-prospects] ${GLOBAL_API_MAX_MS / 1000}s 글로벌 데드라인 – 루프 중단`);
           break crawlLoop;
         }
 
         const s = settled[i]!;
         if (s.status === "rejected") {
-          console.log(`[크롤링 스킵] ${url} - timeout or error`, s.reason);
+          const reason = s.reason instanceof Error ? s.reason.message : String(s.reason);
+          console.log(`[크롤링 실패] ${url} - ${reason} - ${Date.now() - batchWallT0}ms`);
           failures.push({ url, reason: "Crawl failed" });
           continue;
         }
@@ -576,16 +768,19 @@ export async function POST(request: NextRequest) {
       failures.length,
       "crawl ms:",
       crawlElapsed,
-      "safeDeadline:",
-      crawlStoppedForSafeDeadline,
+      "globalDeadline:",
+      globalDeadlineHit,
     );
 
-    // ── Persist NEW rows only (each success → credit used) ──
     const service = await createServiceClient();
     const leads: Array<{ email: string; source_url: string; company_name: string; lead_id: string; client_id: string }> = [];
 
     for (const row of newResultRows) {
-      if (isTimedOut()) break;
+      if (isGlobalDeadline()) {
+        globalDeadlineHit = true;
+        console.log(`[search-prospects] ${GLOBAL_API_MAX_MS / 1000}s 글로벌 데드라인 – insert 중단`);
+        break;
+      }
       try {
         const { data: lead } = await service
           .from("extracted_leads")
@@ -594,7 +789,11 @@ export async function POST(request: NextRequest) {
             source_url: row.source_url,
             company_name: row.company_name,
             emails: [
-              { email: row.email, source: row.source_url, confidence: row.email.startsWith("info@") || row.email.startsWith("hello@") ? "medium" : "high" },
+              {
+                email: row.email,
+                source: row.source_url,
+                confidence: row.email.startsWith("info@") || row.email.startsWith("hello@") ? "medium" : "high",
+              },
             ],
             search_keyword: keyword,
           })
@@ -628,7 +827,7 @@ export async function POST(request: NextRequest) {
     const finalCredits = reserve.remaining + creditsRefunded;
 
     console.log(
-      `[크레딧] 선차감: ${reservedCredits}, 사용(저장): ${creditsUsed}, 환불: ${creditsRefunded}, duplicatesSkipped(미저장): ${duplicatesSkipped}`
+      `[크레딧] 선차감: ${reservedCredits}, 사용(저장): ${creditsUsed}, 환불: ${creditsRefunded}, duplicatesSkipped(미저장): ${duplicatesSkipped}`,
     );
 
     const stats = {
@@ -640,7 +839,6 @@ export async function POST(request: NextRequest) {
       creditsRefunded,
     };
 
-    /** Single-line metrics for ops dashboards / grep (Serper → crawl → DB). */
     console.log(
       "[search-prospects:metrics]",
       JSON.stringify({
@@ -650,7 +848,7 @@ export async function POST(request: NextRequest) {
         emailsInserted: creditsUsed,
         crawlFailures: failures.length,
         duplicatesSkipped,
-        crawlStoppedForSafeDeadline,
+        globalDeadlineHit,
       }),
     );
 
@@ -663,31 +861,33 @@ export async function POST(request: NextRequest) {
       message = `No emails found — all ${targetCount} credits refunded. Try different keywords.`;
     }
 
-    console.log("[search-prospects] === DONE === used:", creditsUsed, "refunded:", creditsRefunded, "elapsed:", Date.now() - PROCESS_START, "ms");
-
-    return NextResponse.json({
-      success: true,
-      leads,
-      stats,
-      generatedSearchQueries: queries,
-      duplicateLeads: dupResultRows.map((r) => ({
-        email: r.email,
-        company_name: r.company_name,
-        source_url: r.source_url,
-        duplicate: true,
-      })),
-      requestedCount: targetCount,
-      searchedCount: candidateUrls.length,
-      processedCount: candidateIndex,
-      successfulUrls: leads.length,
-      failedUrls: failures.length,
-      failed: failures,
-      creditsReserved: reservedCredits,
-      creditsUsed,
-      creditsRefunded,
-      creditsRemaining: finalCredits,
-      message,
-    });
+    return jsonSuccess(
+      {
+        success: true,
+        leads,
+        stats,
+        generatedSearchQueries: queries,
+        duplicateLeads: dupResultRows.map((r) => ({
+          email: r.email,
+          company_name: r.company_name,
+          source_url: r.source_url,
+          duplicate: true,
+        })),
+        requestedCount: targetCount,
+        searchedCount: candidateUrls.length,
+        processedCount: candidateIndex,
+        successfulUrls: leads.length,
+        failedUrls: failures.length,
+        failed: failures,
+        creditsReserved: reservedCredits,
+        creditsUsed,
+        creditsRefunded,
+        creditsRemaining: finalCredits,
+        message,
+        globalDeadlineHit,
+      },
+      PROCESS_START,
+    );
   } catch (error) {
     if (reservedCredits > 0 && userId) await refundCredits(userId, reservedCredits).catch(() => undefined);
     console.error("[search-prospects] === FATAL ===", error instanceof Error ? error.message : String(error));

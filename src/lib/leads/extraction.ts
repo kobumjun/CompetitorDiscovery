@@ -1,3 +1,5 @@
+import { isBlockedDomain, normalizeDomain } from "@/lib/search-prospects-crawl-utils";
+
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 const MAILTO_REGEX = /mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
 const EXCLUDED_EMAIL_HINTS = [
@@ -33,7 +35,6 @@ const EXCLUDED_EMAIL_HINTS = [
   "mailgun",
 ];
 const PATHS_TO_CRAWL = ["", "/contact", "/about", "/team", "/about-us", "/contact-us"];
-const BLOCKED_HOSTS = ["linkedin.com", "instagram.com", "facebook.com", "x.com", "twitter.com"];
 
 export type CrawledPage = { path: string; html: string };
 
@@ -148,7 +149,7 @@ export async function extractWebsiteEmails(
   }
 
   const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
-  if (BLOCKED_HOSTS.some((blocked) => host.includes(blocked))) {
+  if (isBlockedDomain(host)) {
     return {
       ok: false,
       code: "BLOCKED_DOMAIN",
@@ -157,14 +158,33 @@ export async function extractWebsiteEmails(
   }
 
   const baseUrl = `${parsed.protocol}//${parsed.host}`;
-  const timeoutMs = options?.timeoutMs ?? 8000;
-  const pathsToCrawl = options?.paths ?? PATHS_TO_CRAWL;
-  const crawled = await Promise.all(
-    pathsToCrawl.map(async (path) => ({
+  const timeoutMs = options?.timeoutMs ?? 7000;
+  const rawPaths = options?.paths ?? PATHS_TO_CRAWL;
+  const uniquePaths = Array.from(new Set(rawPaths));
+
+  const pathTasks = uniquePaths
+    .map((path) => {
+      const fullUrl = `${baseUrl}${path}`;
+      const dom = normalizeDomain(fullUrl);
+      if (dom && isBlockedDomain(dom)) {
+        return null;
+      }
+      return { path, fullUrl };
+    })
+    .filter((x): x is { path: string; fullUrl: string } => x !== null);
+
+  const settled = await Promise.allSettled(
+    pathTasks.map(async ({ path, fullUrl }) => ({
       path,
-      html: await fetchPageContent(`${baseUrl}${path}`, timeoutMs),
-    }))
+      html: await fetchPageContent(fullUrl, timeoutMs),
+    })),
   );
+
+  const crawled: CrawledPage[] = settled.map((s, idx) => {
+    const pt = pathTasks[idx]!;
+    if (s.status === "fulfilled") return s.value;
+    return { path: pt.path, html: "" };
+  });
   const validPages = crawled.filter((p) => p.html);
   const combinedHtml = validPages.map((p) => p.html).join("\n");
 
