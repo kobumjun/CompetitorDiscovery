@@ -84,8 +84,8 @@ export default function PricingClientPage() {
     <div className="bg-white">
       <section className="py-14 text-center md:py-16">
         <div className="mx-auto max-w-3xl px-6">
-          <h1 className="mb-3 text-display-lg font-black text-ink-900">Choose Your Plan</h1>
-          <p className="text-lg text-ink-500">Get more credits to find leads and send emails</p>
+          <h1 className="mb-3 text-display-lg font-black text-ink-900">Get More Credits</h1>
+          <p className="text-lg text-ink-500">Buy credits to find prospects and send outreach emails</p>
           <div className="mx-auto mt-8 flex max-w-md justify-center px-1">
             <div
               className="inline-flex w-full rounded-full border border-surface-200 bg-white p-1 shadow-sm sm:w-auto"

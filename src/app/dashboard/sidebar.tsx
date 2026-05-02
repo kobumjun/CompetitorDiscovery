@@ -127,7 +127,7 @@ export function DashboardSidebar({ user }: { user: User }) {
           )}
         >
           <CreditCard className="w-3.5 h-3.5" />
-          Upgrade Plan
+          Get More Credits
         </Link>
 
         <div className="flex items-center justify-between">

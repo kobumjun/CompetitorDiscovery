@@ -723,7 +723,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <span className={cn("flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-center text-sm font-semibold transition-colors sm:ml-4 sm:w-auto sm:justify-center", credits <= 3 ? "bg-brand-500 text-white" : "text-brand-600 bg-brand-50/60")}>
-              Upgrade Plan
+              Get More Credits
               <ArrowRight className="w-3.5 h-3.5" />
             </span>
           </div>

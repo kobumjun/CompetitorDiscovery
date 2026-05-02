@@ -92,7 +92,7 @@ export default function SettingsPage() {
         </div>
         <div className="flex gap-2">
           <Link href="/pricing" className="btn-primary flex-1 text-sm justify-center">
-            Upgrade Plan
+            Get More Credits
           </Link>
           {user?.plan !== "free" && (
             <button
