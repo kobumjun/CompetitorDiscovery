@@ -119,14 +119,9 @@ export function DashboardSidebar({ user }: { user: User }) {
 
         <Link
           href="/pricing"
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-colors",
-            liveCredits <= 3
-              ? "text-white bg-brand-500 hover:bg-brand-600"
-              : "text-brand-700 bg-brand-50 hover:bg-brand-100"
-          )}
+          className="btn-primary w-full justify-center gap-2 px-5 py-3 text-base font-bold"
         >
-          <CreditCard className="w-3.5 h-3.5" />
+          <CreditCard className="h-4 w-4 flex-shrink-0" />
           Get More Credits
         </Link>
 
