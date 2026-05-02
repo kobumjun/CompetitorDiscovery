@@ -119,9 +119,9 @@ export function DashboardSidebar({ user }: { user: User }) {
 
         <Link
           href="/pricing"
-          className="btn-primary w-full justify-center gap-2 px-5 py-3 text-base font-bold"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800 transition-colors hover:bg-orange-100"
         >
-          <CreditCard className="h-4 w-4 flex-shrink-0" />
+          <CreditCard className="h-[18px] w-[18px] flex-shrink-0 text-orange-600" />
           Get More Credits
         </Link>
 
