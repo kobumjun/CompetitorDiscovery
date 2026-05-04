@@ -8,7 +8,6 @@ import { createClient } from "@/lib/supabase/client";
 import { fireSignupConversion } from "@/lib/gtag";
 import {
   ArrowRight,
-  ChevronDown,
   ExternalLink,
   Loader2,
   Search,
@@ -124,8 +123,6 @@ export default function DashboardPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [urlFallback, setUrlFallback] = useState("");
-  const [openUrlFallback, setOpenUrlFallback] = useState(false);
   const [prospectLoading, setProspectLoading] = useState(false);
   const [targetCount, setTargetCount] = useState(3);
   const [progress, setProgress] = useState<string | null>(null);
@@ -164,7 +161,7 @@ export default function DashboardPage() {
   const queryInputError = queryHasEmail
     ? "This isn't for email addresses — describe the type of business you sell to instead."
     : queryHasUrl
-      ? "Looks like a URL — use 'Already have a list of URLs? Extract in bulk' below."
+      ? "Looks like a URL — describe the product or type of business you sell to with keywords instead."
       : null;
 
   const hasCreatedAnything = leadCount > 0;
@@ -507,34 +504,6 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="mt-3.5 rounded-lg border border-surface-200 bg-white md:mt-4">
-          <button
-            type="button"
-            className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm font-medium text-ink-700 md:px-4 md:py-3"
-            onClick={() => setOpenUrlFallback((v) => !v)}
-          >
-            <span className="md:hidden">Extract from URLs</span>
-            <span className="hidden md:inline">Already have a list of URLs? Extract in bulk</span>
-            <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", openUrlFallback && "rotate-180")} />
-          </button>
-          {openUrlFallback && (
-            <div className="px-3 pb-3 md:px-4 md:pb-4">
-              <textarea
-                className="input-field min-h-28"
-                placeholder="Paste URLs here, one per line..."
-                value={urlFallback}
-                onChange={(e) => setUrlFallback(e.target.value)}
-              />
-              <Link
-                href={urlFallback.trim() ? `/dashboard/find-contacts?urls=${encodeURIComponent(urlFallback.trim())}` : "/dashboard/find-contacts"}
-                className="btn-secondary mt-2 inline-flex"
-              >
-                Go to Find Contacts
-              </Link>
-            </div>
-          )}
-        </div>
-
         {progress && (
           <div className="mt-3 space-y-1.5">
             <div className="flex items-center gap-2">
@@ -549,6 +518,144 @@ export default function DashboardPage() {
           </div>
         )}
         {prospectError && <p className="mt-3 text-sm text-red-600">{prospectError}</p>}
+
+        {!prospectResult && !prospectLoading && !prospectError && (
+          <div
+            className="mt-3.5 flex min-h-[7rem] flex-col items-center justify-center rounded-xl border border-dashed border-surface-300/90 bg-surface-50/90 px-4 py-4 text-center md:mt-4 md:min-h-[8rem]"
+            aria-label="Extracted emails will appear here after you search"
+          >
+            <p className="text-xs font-bold tracking-wide text-ink-900">
+              <span aria-hidden>📋 </span>
+              Extracted Emails
+            </p>
+            <p className="mt-2 max-w-xs text-xs leading-relaxed text-ink-500">Your prospects will appear here</p>
+          </div>
+        )}
+
+        {prospectResult && (
+          <div className="mt-3.5 rounded-xl border border-surface-200/90 bg-white/95 p-3 shadow-sm sm:p-4 md:mt-4">
+            <p className="text-xs text-emerald-800 sm:text-sm">
+              {prospectResult.message
+                ? prospectResult.message
+                : prospectResult.creditsUsed === 0
+                  ? `No emails found — all ${prospectResult.creditsReserved} credits refunded. Try different keywords.`
+                  : prospectResult.creditsRefunded > 0
+                    ? `✓ Found ${prospectResult.creditsUsed} of ${prospectResult.creditsReserved} emails — ${prospectResult.creditsUsed} credits used, ${prospectResult.creditsRefunded} credits refunded`
+                    : `✓ Found ${prospectResult.creditsUsed} emails — ${prospectResult.creditsUsed} credits used`}
+            </p>
+
+            <div className="mt-4 md:hidden">
+              <div className="flex flex-col gap-3 sm:gap-4">
+                {prospectResult.leads.map((row) => {
+                  const key = rowKeyFor(row);
+                  const composer = rowComposers[key] ?? defaultComposer();
+                  return (
+                    <div key={key} className="flex min-w-0 flex-col gap-3">
+                      <div className="min-w-0 rounded-xl border border-surface-200 bg-white p-4 shadow-sm">
+                        <p className="break-words text-base font-bold text-ink-900">{row.email}</p>
+                        <p className="mt-1.5 text-xs text-ink-500">{row.company_name || "—"}</p>
+                        <a
+                          className="mt-2 block break-all text-xs font-medium text-brand-600 hover:underline"
+                          href={row.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {sourceUrlLabel(row.source_url)}
+                        </a>
+                        <div className="mt-4">
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-center rounded-lg bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+                            onClick={() => {
+                              if (composer.open) {
+                                updateComposer(key, (prev) => ({
+                                  ...prev,
+                                  open: false,
+                                }));
+                              } else {
+                                openComposerForRow(key);
+                              }
+                            }}
+                          >
+                            {composer.open ? "Close" : "Write →"}
+                          </button>
+                        </div>
+                      </div>
+                      {composer.open && (
+                        <div className="min-w-0 rounded-xl border border-orange-200 bg-orange-50/50 p-3">
+                          <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
+                            {prospectComposerCardBody(row, key, composer)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4 hidden overflow-x-auto md:block">
+              <table className="w-full text-sm">
+                <thead className="text-left text-ink-500 border-b border-surface-200">
+                  <tr>
+                    <th className="py-2 pr-2">Email</th>
+                    <th className="py-2 pr-2">Company</th>
+                    <th className="py-2 pr-2">Source URL</th>
+                    <th className="py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {prospectResult.leads.map((row) => {
+                    const key = rowKeyFor(row);
+                    const composer = rowComposers[key] ?? defaultComposer();
+                    return (
+                      <Fragment key={key}>
+                        <tr className="border-b border-surface-100">
+                          <td className="py-2 pr-2 text-ink-800">{row.email}</td>
+                          <td className="py-2 pr-2 text-ink-700">{row.company_name}</td>
+                          <td className="py-2 pr-2">
+                            <a className="text-brand-600 hover:underline" href={row.source_url} target="_blank" rel="noreferrer">
+                              {row.source_url}
+                            </a>
+                          </td>
+                          <td className="py-2">
+                            <button
+                              type="button"
+                              className="inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
+                              onClick={() => {
+                                if (composer.open) {
+                                  updateComposer(key, (prev) => ({
+                                    ...prev,
+                                    open: false,
+                                  }));
+                                } else {
+                                  openComposerForRow(key);
+                                }
+                              }}
+                            >
+                              {composer.open ? "Close" : "Write →"}
+                            </button>
+                          </td>
+                        </tr>
+                        <tr className="border-b border-surface-100">
+                          <td colSpan={4} className="p-0">
+                            <div className={cn("overflow-hidden transition-all duration-300 ease-out", composer.open ? "max-h-[1400px] opacity-100" : "max-h-0 opacity-0")}>
+                              <div className="bg-orange-50/30 border-l-2 border-orange-400 px-4 py-4 sm:px-5 sm:py-5">
+                                <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
+                                  {prospectComposerCardBody(row, key, composer)}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         </div>
 
         {credits !== null && (
@@ -582,131 +689,6 @@ export default function DashboardPage() {
           </Link>
         )}
       </section>
-
-      {prospectResult && (
-        <section className="card p-4 mb-8 sm:p-5">
-          <p className="text-xs text-emerald-800 sm:text-sm">
-            {prospectResult.message
-              ? prospectResult.message
-              : prospectResult.creditsUsed === 0
-                ? `No emails found — all ${prospectResult.creditsReserved} credits refunded. Try different keywords.`
-                : prospectResult.creditsRefunded > 0
-                  ? `✓ Found ${prospectResult.creditsUsed} of ${prospectResult.creditsReserved} emails — ${prospectResult.creditsUsed} credits used, ${prospectResult.creditsRefunded} credits refunded`
-                  : `✓ Found ${prospectResult.creditsUsed} emails — ${prospectResult.creditsUsed} credits used`}
-          </p>
-
-          <div className="mt-4 md:hidden">
-            <div className="flex flex-col gap-3 sm:gap-4">
-              {prospectResult.leads.map((row) => {
-                const key = rowKeyFor(row);
-                const composer = rowComposers[key] ?? defaultComposer();
-                return (
-                  <div key={key} className="flex min-w-0 flex-col gap-3">
-                    <div className="min-w-0 rounded-xl border border-surface-200 bg-white p-4 shadow-sm">
-                      <p className="break-words text-base font-bold text-ink-900">{row.email}</p>
-                      <p className="mt-1.5 text-xs text-ink-500">{row.company_name || "—"}</p>
-                      <a
-                        className="mt-2 block break-all text-xs font-medium text-brand-600 hover:underline"
-                        href={row.source_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {sourceUrlLabel(row.source_url)}
-                      </a>
-                      <div className="mt-4">
-                        <button
-                          type="button"
-                          className="flex w-full items-center justify-center rounded-lg bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
-                          onClick={() => {
-                            if (composer.open) {
-                              updateComposer(key, (prev) => ({
-                                ...prev,
-                                open: false,
-                              }));
-                            } else {
-                              openComposerForRow(key);
-                            }
-                          }}
-                        >
-                          {composer.open ? "Close" : "Write →"}
-                        </button>
-                      </div>
-                    </div>
-                    {composer.open && (
-                      <div className="min-w-0 rounded-xl border border-orange-200 bg-orange-50/50 p-3">
-                        <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
-                          {prospectComposerCardBody(row, key, composer)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mt-4 hidden overflow-x-auto md:block">
-            <table className="w-full text-sm">
-              <thead className="text-left text-ink-500 border-b border-surface-200">
-                <tr>
-                  <th className="py-2 pr-2">Email</th>
-                  <th className="py-2 pr-2">Company</th>
-                  <th className="py-2 pr-2">Source URL</th>
-                  <th className="py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {prospectResult.leads.map((row) => {
-                  const key = rowKeyFor(row);
-                  const composer = rowComposers[key] ?? defaultComposer();
-                  return (
-                    <Fragment key={key}>
-                      <tr className="border-b border-surface-100">
-                        <td className="py-2 pr-2 text-ink-800">{row.email}</td>
-                        <td className="py-2 pr-2 text-ink-700">{row.company_name}</td>
-                        <td className="py-2 pr-2">
-                          <a className="text-brand-600 hover:underline" href={row.source_url} target="_blank" rel="noreferrer">
-                            {row.source_url}
-                          </a>
-                        </td>
-                        <td className="py-2">
-                          <button
-                            type="button"
-                            className="inline-flex items-center rounded-md bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
-                            onClick={() => {
-                              if (composer.open) {
-                                updateComposer(key, (prev) => ({
-                                  ...prev,
-                                  open: false,
-                                }));
-                              } else {
-                                openComposerForRow(key);
-                              }
-                            }}
-                          >
-                            {composer.open ? "Close" : "Write →"}
-                          </button>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-surface-100">
-                        <td colSpan={4} className="p-0">
-                          <div className={cn("overflow-hidden transition-all duration-300 ease-out", composer.open ? "max-h-[1400px] opacity-100" : "max-h-0 opacity-0")}>
-                            <div className="bg-orange-50/30 border-l-2 border-orange-400 px-4 py-4 sm:px-5 sm:py-5">
-                              <div className="rounded-lg border border-surface-200 bg-white p-4 space-y-3">
-                                {prospectComposerCardBody(row, key, composer)}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
 
       {creditsExhaustedModalOpen && (
         <div
