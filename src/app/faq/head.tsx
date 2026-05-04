@@ -55,7 +55,7 @@ const faqSchema = {
       name: "Is ProposalPilot safe to use? Is it legal?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "ProposalPilot only extracts publicly visible email addresses from websites. It does not access private databases, bypass login walls, or scrape social media profiles. We recommend using it for businesses you have a genuine reason to contact.",
+        text: "ProposalPilot only extracts publicly visible email addresses from websites. It does not access private databases, bypass login walls, or scrape social media profiles. Always follow applicable regulations and each site's terms when contacting organizations.",
       },
     },
     {
