@@ -13,7 +13,7 @@ import { OnetimeCheckoutButton } from "@/components/onetime-checkout-button";
 import { SiteFooter } from "@/components/site-footer";
 
 const FREE_FEATURES = [
-  "5 credits",
+  "3 credits",
   "AI-powered customer discovery",
   "AI email writing",
   "Email sending via mailto",
@@ -185,7 +185,7 @@ export default function PricingClientPage() {
                     <span className="text-4xl font-black text-ink-900">$0</span>
                     <span className="text-sm text-ink-400">/mo</span>
                   </div>
-                  <p className="mt-1 text-sm text-ink-500">5 credits</p>
+                  <p className="mt-1 text-sm text-ink-500">3 credits</p>
                   <ul className="mb-8 mt-6 flex-1 space-y-3">
                     {FREE_FEATURES.map((f) => (
                       <li key={f} className="flex items-start gap-2.5 text-sm text-ink-700">

@@ -19,7 +19,7 @@ ProposalPilot extracts contact emails from any website URL and generates persona
 - 4 AI outreach types with GPT-4o personalization
 
 ## Pricing
-- Free: 5 credits
+- Free: 3 credits
 - Pro: $19/month, 50 credits
 - Agency: $49/month, 200 credits
 

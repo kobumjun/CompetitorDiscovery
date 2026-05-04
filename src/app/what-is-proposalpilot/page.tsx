@@ -83,7 +83,7 @@ export default function WhatIsProposalPilotPage() {
           <div className="card p-7">
             <h2 className="text-heading font-bold text-ink-900 mb-3">Pricing summary</h2>
             <ul className="space-y-2 text-sm text-ink-600">
-              <li>Free: 5 credits</li>
+              <li>Free: 3 credits</li>
               <li>Pro: $19/mo (200 credits)</li>
               <li>Agency: $49/mo (700 credits)</li>
             </ul>
