@@ -6,16 +6,12 @@ import { useParams } from "next/navigation";
 import { useSWRConfig } from "swr";
 import { createClient } from "@/lib/supabase/client";
 import type { ExtractedLead, ExtractedEmail, OutreachType } from "@/types";
-import { ArrowLeft, Copy, ExternalLink, Mail, RefreshCw } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
 
-const OUTREACH_TYPES: { key: OutreachType; label: string }[] = [
-  { key: "proposal", label: "Proposal" },
-  { key: "pitch", label: "Sales Pitch" },
-  { key: "investment", label: "Investment Proposal" },
-  { key: "quote", label: "Quote / Estimate" },
-];
+/** Fixed outreach type for AI generation (no per-email type picker in UI). */
+const AI_OUTREACH_TYPE: OutreachType = "pitch";
 
 export default function LeadDetailPage() {
   const params = useParams<{ id: string }>();
@@ -24,8 +20,6 @@ export default function LeadDetailPage() {
 
   const [lead, setLead] = useState<ExtractedLead | null>(null);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
-  const [type, setType] = useState<OutreachType>("proposal");
-  const [writeMode, setWriteMode] = useState<"ai" | "manual">("ai");
   const [context, setContext] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -82,7 +76,7 @@ export default function LeadDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leadId: lead.id,
-          type,
+          type: AI_OUTREACH_TYPE,
           context,
           recipientEmails: selectedEmails,
         }),
@@ -120,7 +114,7 @@ export default function LeadDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leadId: lead.id,
-          type,
+          type: AI_OUTREACH_TYPE,
           recipientEmails: selectedEmails,
           subject,
           body,
@@ -143,35 +137,50 @@ export default function LeadDetailPage() {
   }
 
   function openInEmailClient() {
-    if (!subject || !body || selectedEmails.length === 0) return;
+    if (selectedEmails.length === 0) return;
+    if (!subject.trim() && !body.trim()) return;
     const recipients = selectedEmails.join(",");
-    const encodedSubject = encodeURIComponent(subject);
-    const encodedBody = encodeURIComponent(withSignature(body));
+    const encodedSubject = encodeURIComponent(subject.trim() || " ");
+    const encodedBody = encodeURIComponent(withSignature(body.trim() || ""));
     const bcc = bccSelf && userEmail ? `&bcc=${encodeURIComponent(userEmail)}` : "";
     const mailtoLink = `mailto:${recipients}?subject=${encodedSubject}&body=${encodedBody}${bcc}`;
     window.location.href = mailtoLink;
     setNotice("Opened your default email client.");
-    void saveOutreachRecord();
+    if (subject.trim() && body.trim()) void saveOutreachRecord();
   }
 
   function openInGmail() {
-    if (!subject || !body || selectedEmails.length === 0) return;
+    if (selectedEmails.length === 0) return;
+    if (!subject.trim() && !body.trim()) return;
     const recipients = selectedEmails.join(",");
-    const encodedSubject = encodeURIComponent(subject);
-    const encodedBody = encodeURIComponent(withSignature(body));
+    const encodedSubject = encodeURIComponent(subject.trim() || " ");
+    const encodedBody = encodeURIComponent(withSignature(body.trim() || ""));
     const bcc = bccSelf && userEmail ? `&bcc=${encodeURIComponent(userEmail)}` : "";
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipients)}&su=${encodedSubject}&body=${encodedBody}${bcc}`;
     window.open(gmailUrl, "_blank");
     setNotice("Opened Gmail compose in a new tab.");
-    void saveOutreachRecord();
+    if (subject.trim() && body.trim()) void saveOutreachRecord();
+  }
+
+  function handlePrimaryOpenEmail() {
+    setError(null);
+    if (selectedEmails.length === 0) {
+      setError("Select at least one email address above.");
+      return;
+    }
+    if (!subject.trim() && !body.trim()) {
+      setError("Write a subject or body first.");
+      return;
+    }
+    openInEmailClient();
   }
 
   async function copyToClipboard() {
     try {
-      const fullEmail = `To: ${selectedEmails.join(", ")}\nSubject: ${subject}\n\n${withSignature(body)}`;
+      const fullEmail = `To: ${selectedEmails.join(", ")}\nSubject: ${subject.trim()}\n\n${withSignature(body.trim())}`;
       await navigator.clipboard.writeText(fullEmail);
       setNotice("Email copied to clipboard.");
-      void saveOutreachRecord();
+      if (subject.trim() && body.trim()) void saveOutreachRecord();
     } catch {
       setError("Clipboard copy failed.");
     }
@@ -239,8 +248,14 @@ export default function LeadDetailPage() {
             </label>
           ))}
         </div>
-        <div className="flex items-center justify-between mt-4">
-          <span className="text-xs text-ink-500">{selectedEmails.length} selected</span>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-ink-500">
+            {selectedEmails.length === 0
+              ? "No emails selected"
+              : selectedEmails.length === 1
+                ? "1 email selected"
+                : `${selectedEmails.length} emails selected`}
+          </span>
           <span className="text-xs text-ink-500 bg-surface-100 px-2 py-1 rounded-md">
             Tip: use this tool for businesses you have a genuine reason to contact.
           </span>
@@ -249,131 +264,98 @@ export default function LeadDetailPage() {
 
       <section className="card p-5 space-y-4">
         <h2 className="text-lg font-semibold text-ink-900">Write Your Email</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {OUTREACH_TYPES.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setType(item.key)}
-              className={cn(
-                "btn-secondary justify-start",
-                type === item.key && "bg-brand-50 border-brand-300 text-brand-700"
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
+
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">To</p>
+          <p className="mt-1 text-sm text-ink-900 break-all">
+            {selectedEmails.length === 0
+              ? "— Select one or more emails above"
+              : selectedEmails.length <= 2
+                ? selectedEmails.join(", ")
+                : `${selectedEmails.length} selected emails`}
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
-            onClick={() => setWriteMode("ai")}
-            className={cn(
-              "btn-secondary justify-center",
-              writeMode === "ai" && "bg-brand-50 border-brand-300 text-brand-700"
-            )}
-          >
-            ✨ Generate with AI
-          </button>
-          <button
-            onClick={() => setWriteMode("manual")}
-            className={cn(
-              "btn-secondary justify-center",
-              writeMode === "manual" && "bg-brand-50 border-brand-300 text-brand-700"
-            )}
-          >
-            ✍️ Write it myself
-          </button>
+        <input
+          className="input-field"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          placeholder="Subject"
+        />
+        <textarea
+          className="input-field min-h-40"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Write your email here..."
+        />
+
+        <div>
+          <label htmlFor="lead-ai-context" className="text-xs font-medium text-ink-500">
+            Optional context for AI generation
+          </label>
+          <textarea
+            id="lead-ai-context"
+            className="input-field mt-1.5 min-h-[4.5rem] text-sm"
+            placeholder="e.g. product launch, follow-up after demo…"
+            value={context}
+            onChange={(e) => setContext(e.target.value)}
+          />
         </div>
 
-        {writeMode === "ai" && (
-          <>
-            <textarea
-              className="input-field min-h-28"
-              placeholder="Specific context for this outreach..."
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-            />
+        <div className="flex flex-col gap-3 border-t border-surface-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={generateEmail}
+              type="button"
+              onClick={() => void generateEmail()}
               disabled={generating || selectedEmails.length === 0}
-              className="btn-primary"
+              className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold"
             >
-              <Mail className="w-4 h-4" />
-              {generating ? "Generating..." : "Generate Email with AI (1 credit)"}
+              <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+              {generating ? "Generating…" : "AI Generate"}
             </button>
-          </>
-        )}
-
-        {writeMode === "manual" && (
-          <>
-            <input
-              className="input-field"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Email subject line"
-            />
-            <textarea
-              className="input-field min-h-64"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="Write your email here..."
-            />
-            <p className="text-xs text-ink-400">No credits used when writing manually.</p>
-          </>
-        )}
-
-        {subject && body && (
-          <div className="space-y-3">
-            <div className="rounded-xl border border-surface-200 bg-white shadow-sm">
-              <div className="px-4 py-3 border-b border-surface-200">
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Subject</p>
-                <p className="text-sm font-semibold text-ink-900 mt-1 break-words">{subject}</p>
-              </div>
-              <div className="px-4 py-3 max-h-80 overflow-y-auto">
-                <p className="text-sm text-ink-700 whitespace-pre-wrap leading-relaxed">{body}</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {writeMode === "ai" && (
-                <button onClick={generateEmail} className="btn-secondary" disabled={generating}>
-                  <RefreshCw className="w-4 h-4" /> Regenerate
-                </button>
-              )}
-              <button
-                onClick={openInEmailClient}
-                className="btn-primary"
-                disabled={!subject || !body || selectedEmails.length === 0}
-              >
-                Open in Email Client
-              </button>
-              <button
-                onClick={openInGmail}
-                className="btn-secondary"
-                disabled={!subject || !body || selectedEmails.length === 0}
-              >
-                Open in Gmail (Web)
-              </button>
-              <button onClick={copyToClipboard} className="btn-secondary">
-                <Copy className="w-4 h-4" /> Copy Email
-              </button>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-ink-600">
-              <input
-                type="checkbox"
-                checked={bccSelf}
-                onChange={(e) => setBccSelf(e.target.checked)}
-              />
-              Also send a copy to myself (BCC)
-            </label>
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-              This opens your email client with everything pre-filled. The email sends from your address, so replies come directly to your inbox.
-            </div>
-            {subject.length + body.length > 1800 && (
-              <div className="text-xs text-amber-700">
-                This email is long. If it looks cut off in your email client, use "Copy Email" instead.
-              </div>
-            )}
+            <span className="text-[11px] text-ink-400">Uses 1 credit</span>
           </div>
+          <button
+            type="button"
+            onClick={handlePrimaryOpenEmail}
+            className="btn-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto sm:min-w-[10rem]"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Open in Email
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={openInGmail}
+            className="btn-secondary text-sm"
+            disabled={selectedEmails.length === 0 || (!subject.trim() && !body.trim())}
+          >
+            Open in Gmail (Web)
+          </button>
+          <button
+            type="button"
+            onClick={() => void copyToClipboard()}
+            className="btn-secondary text-sm"
+            disabled={selectedEmails.length === 0}
+          >
+            <Copy className="mr-1 inline h-4 w-4" />
+            Copy Email
+          </button>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm text-ink-600">
+          <input type="checkbox" checked={bccSelf} onChange={(e) => setBccSelf(e.target.checked)} />
+          Also send a copy to myself (BCC)
+        </label>
+        <p className="text-xs text-ink-400">No credits used when you only write manually and open in your client.</p>
+
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Opens your email app with this subject and body pre-filled. Replies go to your inbox.
+        </div>
+        {subject.length + body.length > 1800 && (
+          <div className="text-xs text-amber-700">Long email? If it looks cut off in your client, use Copy Email.</div>
         )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
