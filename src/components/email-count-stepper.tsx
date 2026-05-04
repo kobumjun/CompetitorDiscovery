@@ -41,19 +41,19 @@ export function EmailCountStepper({
   }
 
   return (
-    <div className={cn("flex items-center gap-1.5", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1 md:gap-1.5", className)}>
       <button
         type="button"
         disabled={disabled || value <= MIN}
         onClick={() => onChange(clamp(value - 1))}
         aria-label="Decrease count"
         className={cn(
-          "flex h-10 w-10 items-center justify-center rounded-lg border text-lg font-semibold transition-colors select-none",
+          "flex h-8 w-8 items-center justify-center rounded-lg border text-base font-semibold transition-colors select-none md:h-10 md:w-10 md:text-lg",
           "border-orange-200 text-orange-600 hover:bg-orange-50 active:bg-orange-100",
           (disabled || value <= MIN) && "opacity-35 cursor-not-allowed hover:bg-transparent active:bg-transparent"
         )}
       >
-        <Minus className="h-4 w-4" />
+        <Minus className="h-3.5 w-3.5 md:h-4 md:w-4" />
       </button>
 
       <input
@@ -65,7 +65,7 @@ export function EmailCountStepper({
         onChange={handleInputChange}
         onBlur={handleBlur}
         className={cn(
-          "h-10 w-12 rounded-lg border border-orange-200 bg-white text-center text-lg font-bold text-ink-900 outline-none transition-colors",
+          "h-8 w-10 rounded-lg border border-orange-200 bg-white text-center text-base font-bold text-ink-900 outline-none transition-colors md:h-10 md:w-12 md:text-lg",
           "focus:border-orange-400 focus:ring-2 focus:ring-orange-200",
           disabled && "opacity-50 cursor-not-allowed"
         )}
@@ -82,17 +82,20 @@ export function EmailCountStepper({
             : undefined
         }
         className={cn(
-          "flex h-10 w-10 items-center justify-center rounded-lg border text-lg font-semibold transition-colors select-none",
+          "flex h-8 w-8 items-center justify-center rounded-lg border text-base font-semibold transition-colors select-none md:h-10 md:w-10 md:text-lg",
           "border-orange-200 text-orange-600 hover:bg-orange-50 active:bg-orange-100",
           (disabled || value >= effectiveMax) &&
             "opacity-35 cursor-not-allowed hover:bg-transparent active:bg-transparent"
         )}
       >
-        <Plus className="h-4 w-4" />
+        <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
       </button>
 
       {maxCredits !== null && effectiveMax < ABS_MAX && (
-        <span className="ml-2 text-xs text-amber-600">max {effectiveMax} (limited by credits)</span>
+        <span className="ml-1 shrink-0 text-[11px] text-amber-600 md:ml-2 md:text-xs">
+          <span className="md:hidden">max {effectiveMax}</span>
+          <span className="hidden md:inline">max {effectiveMax} (limited by credits)</span>
+        </span>
       )}
     </div>
   );

@@ -386,8 +386,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-      <div className="mb-6 sm:mb-8">
+    <div className="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-8">
+      <div className="mb-6 hidden md:block sm:mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-display sm:font-black">Dashboard</h1>
         <p className="text-ink-500 mt-1">Your proposal command center</p>
       </div>
@@ -395,45 +395,50 @@ export default function DashboardPage() {
       <section
         ref={searchSectionRef}
         className={cn(
-          "mb-8 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white",
-          hasCreatedAnything ? "p-3.5 sm:p-6" : "p-4 sm:p-8"
+          "mb-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white md:mb-8",
+          hasCreatedAnything ? "p-3 md:p-6" : "p-3 md:p-8"
         )}
       >
         <h2
           className={cn(
             "font-black text-ink-900",
-            hasCreatedAnything ? "text-xl sm:text-3xl" : "text-2xl sm:text-3xl md:text-4xl"
+            hasCreatedAnything ? "text-lg md:text-3xl" : "text-xl md:text-3xl lg:text-4xl"
           )}
         >
           What do you sell?
         </h2>
-        <p className="mt-1 text-sm sm:mt-2 sm:text-base text-ink-600">
+        <p className="mt-1 hidden text-sm text-ink-600 sm:mt-2 sm:text-base md:block">
           Describe your product or service — we&apos;ll find matching prospects instantly.
         </p>
         {credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything && (
-          <p className="mt-2 text-sm font-medium text-orange-700 sm:mt-3">👇 Click one to try it now</p>
+          <p className="mt-2 hidden text-sm font-medium text-orange-700 sm:mt-3 md:block">👇 Click one to try it now</p>
         )}
-        <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-ink-500 sm:mt-3">Try an example:</p>
-        <div className={cn("mt-1.5 flex flex-wrap gap-1.5 sm:mt-2 sm:gap-2", credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "sm:mt-3")}>
+        <p className="mt-2 hidden text-xs font-semibold uppercase tracking-wide text-ink-500 sm:mt-3 md:block">Try an example:</p>
+        <div
+          className={cn(
+            "mt-2 flex flex-wrap gap-1 md:mt-2 md:gap-2",
+            credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "md:mt-3"
+          )}
+        >
           {["coffee machines", "accounting services", "web design"].map((text, i) => (
             <button
               key={text}
               type="button"
               disabled={prospectLoading}
               className={cn(
-                "inline-flex cursor-pointer items-center rounded-lg border px-2 py-1.5 text-left transition-colors disabled:opacity-50 sm:px-3 sm:py-2",
+                "inline-flex cursor-pointer items-center rounded-md border px-1.5 py-1 text-left transition-colors disabled:opacity-50 md:rounded-lg md:px-3 md:py-2",
                 credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything
                   ? "bg-orange-100 border-orange-300 hover:bg-orange-200"
                   : "bg-orange-50 border-orange-200 hover:bg-orange-100"
               )}
               onClick={() => setQuery(text)}
             >
-              {i === 0 && <span className="mr-0.5 text-sm leading-none sm:mr-1 sm:text-base">☕</span>}
-              {i === 1 && <span className="mr-0.5 text-sm leading-none sm:mr-1 sm:text-base">📊</span>}
-              {i === 2 && <span className="mr-0.5 text-sm leading-none sm:mr-1 sm:text-base">🎨</span>}
+              {i === 0 && <span className="mr-0.5 text-xs leading-none md:mr-1 md:text-base">☕</span>}
+              {i === 1 && <span className="mr-0.5 text-xs leading-none md:mr-1 md:text-base">📊</span>}
+              {i === 2 && <span className="mr-0.5 text-xs leading-none md:mr-1 md:text-base">🎨</span>}
               <span
                 className={cn(
-                  "text-[11px] text-orange-700 sm:text-sm",
+                  "text-[10px] text-orange-700 md:text-sm",
                   credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "font-medium" : "italic"
                 )}
               >
@@ -442,10 +447,13 @@ export default function DashboardPage() {
             </button>
           ))}
         </div>
-        <label className="mt-3 block text-sm font-medium text-ink-700 sm:mt-4">What do you sell?</label>
+        <label className="mt-3 hidden text-sm font-medium text-ink-700 sm:mt-4 md:block">What do you sell?</label>
         <input
           ref={queryInputRef}
-          className={cn("input-field mt-1.5 h-11 sm:mt-2 sm:h-12", queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200")}
+          className={cn(
+            "input-field mt-2 h-10 md:mt-2 md:h-12",
+            queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200"
+          )}
           placeholder="e.g. coffee machines, web design, accounting services"
           value={query}
           autoFocus={leadCount === 0 && !prospectResult}
@@ -457,12 +465,12 @@ export default function DashboardPage() {
         {queryInputError && (
           <p className="mt-1.5 text-sm text-red-600">{queryInputError}</p>
         )}
-        <div className="mt-3 sm:mt-4">
-          <p className="text-sm font-medium text-ink-700 mb-2">How many emails to find?</p>
+        <div className="mt-2 md:mt-4">
+          <p className="mb-2 hidden text-sm font-medium text-ink-700 md:block">How many emails to find?</p>
           <EmailCountStepper value={targetCount} onChange={setTargetCount} maxCredits={credits} disabled={prospectLoading} />
         </div>
         {credits !== null && credits > 0 && credits <= 2 && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 sm:mt-4">
+          <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900 sm:mt-3 sm:px-3 sm:py-2.5 sm:text-sm md:mt-4">
             <span className="font-medium">⚠️ You have {credits} credit{credits !== 1 ? "s" : ""} left.</span>{" "}
             <Link href="/pricing" className="font-semibold text-brand-700 underline hover:text-brand-800">
               Upgrade
@@ -472,35 +480,37 @@ export default function DashboardPage() {
         )}
         <button
           type="button"
-          className="mt-3 inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
+          className="mt-2.5 inline-flex w-full items-center justify-center rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50 md:mt-3 md:w-auto md:px-6 md:py-3"
           onClick={() => void tryFindProspects()}
           disabled={prospectLoading || !query.trim() || !!queryInputError || (credits !== null && credits > 0 && targetCount > credits)}
         >
-          <Search className="w-4 h-4 mr-1.5" />
+          <Search className="mr-1.5 h-4 w-4" />
           Find {targetCount} Prospects & Emails
-          <ArrowRight className="w-4 h-4 ml-1.5" />
+          <ArrowRight className="ml-1.5 h-4 w-4" />
         </button>
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <div className="mt-2 hidden flex-wrap items-center gap-x-2 gap-y-1 text-xs md:flex">
           <p className="text-ink-500">
             Uses {targetCount} credit{targetCount !== 1 ? "s" : ""}. Unused credits refunded if fewer emails are found.
           </p>
           {credits !== null && (
-            <p className={cn(credits <= 3 ? "text-amber-700 font-medium" : "text-ink-600")}>
+            <p className={cn(credits <= 3 ? "font-medium text-amber-700" : "text-ink-600")}>
               You have {credits} credit{credits !== 1 ? "s" : ""} remaining
             </p>
           )}
         </div>
 
-        <div className="mt-4 rounded-lg border border-surface-200 bg-white">
+        <div className="mt-3 rounded-lg border border-surface-200 bg-white md:mt-4">
           <button
-            className="w-full px-4 py-3 text-left text-sm font-medium text-ink-700 flex items-center justify-between"
+            type="button"
+            className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm font-medium text-ink-700 md:px-4 md:py-3"
             onClick={() => setOpenUrlFallback((v) => !v)}
           >
-            Already have a list of URLs? Extract in bulk
-            <ChevronDown className={cn("w-4 h-4 transition-transform", openUrlFallback && "rotate-180")} />
+            <span className="md:hidden">Extract from URLs</span>
+            <span className="hidden md:inline">Already have a list of URLs? Extract in bulk</span>
+            <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", openUrlFallback && "rotate-180")} />
           </button>
           {openUrlFallback && (
-            <div className="px-4 pb-4">
+            <div className="px-3 pb-3 md:px-4 md:pb-4">
               <textarea
                 className="input-field min-h-28"
                 placeholder="Paste URLs here, one per line..."
@@ -516,6 +526,35 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
+        {credits !== null && (
+          <Link
+            href="/pricing"
+            className={cn(
+              "mt-3 flex flex-wrap items-baseline gap-x-1.5 text-sm md:hidden",
+              credits === 0 ? "text-red-700" : "text-ink-700"
+            )}
+          >
+            <span className="text-amber-600" aria-hidden>
+              ✦
+            </span>
+            <span>
+              {credits === 0 ? (
+                <span className="font-medium">No credits remaining</span>
+              ) : (
+                <>
+                  <strong className={cn("text-ink-900", credits <= 3 && "text-amber-800")}>{credits}</strong> credit
+                  {credits !== 1 ? "s" : ""} remaining
+                </>
+              )}
+            </span>
+            <span className="text-ink-300">·</span>
+            <span className="inline-flex items-center gap-0.5 font-semibold text-brand-600">
+              Get More Credits
+              <ArrowRight className="h-3.5 w-3.5" />
+            </span>
+          </Link>
+        )}
 
         {progress && (
           <div className="mt-3 space-y-1.5">
@@ -700,7 +739,7 @@ export default function DashboardPage() {
         <Link
           href="/pricing"
           className={cn(
-            "card mb-8 block p-4 transition-colors",
+            "card mb-8 hidden p-4 transition-colors md:block",
             credits === 0
               ? "border-red-200 bg-red-50 hover:bg-red-100/70"
               : credits <= 3
@@ -710,10 +749,10 @@ export default function DashboardPage() {
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3 sm:items-center">
-              <Sparkles className={cn("w-5 h-5 flex-shrink-0", credits === 0 ? "text-red-500" : credits <= 3 ? "text-amber-500" : "text-brand-500")} />
+              <Sparkles className={cn("h-5 w-5 flex-shrink-0", credits === 0 ? "text-red-500" : credits <= 3 ? "text-amber-500" : "text-brand-500")} />
               <span className="text-sm text-ink-700">
                 {credits === 0 ? (
-                  <span className="text-red-700 font-medium">No credits remaining</span>
+                  <span className="font-medium text-red-700">No credits remaining</span>
                 ) : (
                   <>
                     <strong className={cn("text-ink-900", credits <= 3 && "text-amber-800")}>{credits}</strong>{" "}
@@ -722,9 +761,14 @@ export default function DashboardPage() {
                 )}
               </span>
             </div>
-            <span className={cn("flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-center text-sm font-semibold transition-colors sm:ml-4 sm:w-auto sm:justify-center", credits <= 3 ? "bg-brand-500 text-white" : "text-brand-600 bg-brand-50/60")}>
+            <span
+              className={cn(
+                "flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-center text-sm font-semibold transition-colors sm:ml-4 sm:w-auto sm:justify-center sm:px-4 sm:py-2",
+                credits <= 3 ? "bg-brand-500 text-white" : "bg-brand-50/60 text-brand-600"
+              )}
+            >
               Get More Credits
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </span>
           </div>
         </Link>
