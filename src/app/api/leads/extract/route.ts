@@ -53,11 +53,14 @@ export async function POST(request: NextRequest) {
     }
 
     const serviceClient = await createServiceClient();
+    const primaryLower = extractedEmails[0].toLowerCase();
     const { data: lead, error: insertError } = await serviceClient
       .from("extracted_leads")
       .insert({
         user_id: user.id,
         source_url: baseUrl,
+        website_url: baseUrl,
+        contact_email: primaryLower,
         company_name: analysis.companyName || host,
         industry: analysis.industry || null,
         company_info: analysis.description || null,
@@ -66,6 +69,7 @@ export async function POST(request: NextRequest) {
           source: sourceForEmail.get(email.toLowerCase()) ?? baseUrl,
           confidence: email.startsWith("info@") || email.startsWith("hello@") ? "medium" : "high",
         })),
+        lead_status: "new",
       })
       .select("*")
       .single();

@@ -419,22 +419,20 @@ function dedupeBlocklistOrganic(organic: SerperOrganicResult[]): SerperOrganicRe
 async function loadExistingEmails(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<Set<string>> {
   const existingEmails = new Set<string>();
   try {
-    const direct = await supabase.from("extracted_leads").select("email").eq("user_id", userId);
-    if (!direct.error && Array.isArray(direct.data)) {
-      for (const row of direct.data as Array<{ email?: string | null }>) {
-        const e = row.email?.toLowerCase();
-        if (e) existingEmails.add(e);
-      }
-    } else {
-      const fallback = await supabase.from("extracted_leads").select("emails").eq("user_id", userId).limit(3000);
-      if (fallback.error) throw fallback.error;
-      for (const row of (fallback.data ?? []) as Array<{ emails?: unknown }>) {
-        const arr = row.emails;
-        if (!Array.isArray(arr)) continue;
-        for (const item of arr) {
-          const em = typeof item === "object" && item && "email" in item ? (item as { email?: string }).email : undefined;
-          if (em) existingEmails.add(em.toLowerCase());
-        }
+    const { data, error } = await supabase
+      .from("extracted_leads")
+      .select("contact_email, emails")
+      .eq("user_id", userId)
+      .limit(5000);
+    if (error) throw error;
+    for (const row of (data ?? []) as Array<{ contact_email?: string | null; emails?: unknown }>) {
+      const c = row.contact_email?.toLowerCase();
+      if (c) existingEmails.add(c);
+      const arr = row.emails;
+      if (!Array.isArray(arr)) continue;
+      for (const item of arr) {
+        const em = typeof item === "object" && item && "email" in item ? (item as { email?: string }).email : undefined;
+        if (em) existingEmails.add(em.toLowerCase());
       }
     }
     console.log(`[중복 체크] 기존 이메일 ${existingEmails.size}개`);
@@ -782,11 +780,25 @@ export async function POST(request: NextRequest) {
         break;
       }
       try {
-        const { data: lead } = await service
+        const contactEmail = row.email.toLowerCase();
+        const websiteUrl = row.source_url;
+
+        const { data: existingLead } = await service
+          .from("extracted_leads")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("contact_email", contactEmail)
+          .eq("website_url", websiteUrl)
+          .maybeSingle();
+        if (existingLead) continue;
+
+        const { data: lead, error: leadErr } = await service
           .from("extracted_leads")
           .insert({
             user_id: user.id,
             source_url: row.source_url,
+            website_url: websiteUrl,
+            contact_email: contactEmail,
             company_name: row.company_name,
             emails: [
               {
@@ -796,10 +808,11 @@ export async function POST(request: NextRequest) {
               },
             ],
             search_keyword: keyword,
+            lead_status: "new",
           })
           .select("id")
           .single();
-        if (!lead) continue;
+        if (leadErr || !lead) continue;
 
         const { data: client } = await service
           .from("clients")

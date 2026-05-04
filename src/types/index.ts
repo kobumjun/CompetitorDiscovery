@@ -10,7 +10,7 @@ export interface User {
 
 export type PlanType = "free" | "pro" | "agency";
 
-export const INITIAL_FREE_CREDITS = 3;
+export const INITIAL_FREE_CREDITS = 5;
 
 export interface BusinessProfile {
   id: string;
@@ -136,6 +136,8 @@ export interface ExtractedEmail {
   confidence: EmailConfidence;
 }
 
+export type LeadPipelineStatus = "new" | "pitch_drafted" | "sent";
+
 export interface ExtractedLead {
   id: string;
   user_id: string;
@@ -147,6 +149,12 @@ export interface ExtractedLead {
   outreach_count: number;
   created_at: string;
   updated_at: string;
+  /** Denormalized primary email for list + dedupe (mirrors emails[0].email when set) */
+  contact_email?: string | null;
+  /** Page where the lead was found (often same as source_url) */
+  website_url?: string | null;
+  search_keyword?: string | null;
+  lead_status?: LeadPipelineStatus | string | null;
 }
 
 export type OutreachType = "proposal" | "pitch" | "investment" | "quote";

@@ -63,7 +63,10 @@ export async function POST(request: NextRequest) {
 
     await serviceClient
       .from("extracted_leads")
-      .update({ outreach_count: (lead.outreach_count ?? 0) + recipientEmails.length })
+      .update({
+        outreach_count: (lead.outreach_count ?? 0) + recipientEmails.length,
+        lead_status: normalizedStatus === "opened_in_client" ? "sent" : "pitch_drafted",
+      })
       .eq("id", leadId)
       .eq("user_id", user.id);
 

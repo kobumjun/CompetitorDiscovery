@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   Rocket,
   LayoutDashboard,
+  Users,
   Sparkles,
   Settings,
   LogOut,
@@ -20,6 +21,7 @@ import { useDashboardCredits } from "@/lib/use-dashboard-credits";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
+  { href: "/dashboard/leads", icon: Users, label: "Leads", exact: true },
   { href: "/pricing", icon: Sparkles, label: "Pricing", exact: true },
   { href: "/dashboard/settings", icon: Settings, label: "Settings", exact: false },
 ];

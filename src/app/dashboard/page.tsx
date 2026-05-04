@@ -27,6 +27,12 @@ type ProspectLead = {
   client_id: string;
 };
 
+const DASHBOARD_SEARCH_EXAMPLES = [
+  { value: "marketing agency", emoji: "📈" },
+  { value: "web design freelancer", emoji: "🎨" },
+  { value: "SaaS product", emoji: "🚀" },
+] as const;
+
 type BulkPayload = {
   success: boolean;
   requestedCount: number;
@@ -263,6 +269,7 @@ export default function DashboardPage() {
         setCredits(payload.creditsRemaining);
         void mutateGlobal(DASHBOARD_CREDITS_KEY, payload.creditsRemaining, false);
       }
+      void mutateGlobal("dashboard-extracted-leads");
       const supabase = createClient();
       const {
         data: { user: u },
@@ -425,9 +432,9 @@ export default function DashboardPage() {
             credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "" : "md:mt-3"
           )}
         >
-          {["coffee machines", "accounting services", "web design"].map((text, i) => (
+          {DASHBOARD_SEARCH_EXAMPLES.map(({ value, emoji }) => (
             <button
-              key={text}
+              key={value}
               type="button"
               disabled={prospectLoading}
               className={cn(
@@ -436,18 +443,18 @@ export default function DashboardPage() {
                   ? "bg-orange-100 border-orange-300 hover:bg-orange-200"
                   : "bg-orange-50 border-orange-200 hover:bg-orange-100"
               )}
-              onClick={() => setQuery(text)}
+              onClick={() => setQuery(value)}
             >
-              {i === 0 && <span className="mr-0.5 text-xs leading-none md:mr-1 md:text-base">☕</span>}
-              {i === 1 && <span className="mr-0.5 text-xs leading-none md:mr-1 md:text-base">📊</span>}
-              {i === 2 && <span className="mr-0.5 text-xs leading-none md:mr-1 md:text-base">🎨</span>}
+              <span className="mr-0.5 text-xs leading-none md:mr-1 md:text-base" aria-hidden>
+                {emoji}
+              </span>
               <span
                 className={cn(
                   "text-[10px] text-orange-700 md:text-sm",
                   credits !== null && credits >= INITIAL_FREE_CREDITS && !hasCreatedAnything ? "font-medium" : "italic"
                 )}
               >
-                {text}
+                {value}
               </span>
             </button>
           ))}
@@ -459,7 +466,7 @@ export default function DashboardPage() {
             "input-field mt-3 h-10 md:mt-2 md:h-12",
             queryInputError && "border-red-300 focus:border-red-400 focus:ring-red-200"
           )}
-          placeholder="e.g. coffee machines, web design, accounting services"
+          placeholder="e.g. marketing agency, web design freelancer, SaaS product"
           value={query}
           autoFocus={leadCount === 0 && !prospectResult}
           onChange={(e) => setQuery(e.target.value)}
@@ -543,6 +550,14 @@ export default function DashboardPage() {
                     ? `✓ Found ${prospectResult.creditsUsed} of ${prospectResult.creditsReserved} emails — ${prospectResult.creditsUsed} credits used, ${prospectResult.creditsRefunded} credits refunded`
                     : `✓ Found ${prospectResult.creditsUsed} emails — ${prospectResult.creditsUsed} credits used`}
             </p>
+            {prospectResult.leads.length > 0 && (
+              <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-600">
+                <span>Saved to Leads.</span>
+                <Link href="/dashboard/leads" className="font-semibold text-brand-600 hover:text-brand-800">
+                  View all in Leads →
+                </Link>
+              </p>
+            )}
 
             <div className="mt-4 md:hidden">
               <div className="flex flex-col gap-3 sm:gap-4">

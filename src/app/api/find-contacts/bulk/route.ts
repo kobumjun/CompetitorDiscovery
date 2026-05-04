@@ -184,11 +184,25 @@ export async function POST(request: NextRequest) {
     let creditsUsed = 0;
 
     for (const item of selected) {
+      const contactEmail = item.email.toLowerCase();
+      const websiteUrl = item.source_url;
+
+      const { data: existingLead } = await service
+        .from("extracted_leads")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("contact_email", contactEmail)
+        .eq("website_url", websiteUrl)
+        .maybeSingle();
+      if (existingLead) continue;
+
       const { data: lead, error: leadError } = await service
         .from("extracted_leads")
         .insert({
           user_id: user.id,
           source_url: item.source_url,
+          website_url: websiteUrl,
+          contact_email: contactEmail,
           company_name: item.company_name,
           emails: [
             {
@@ -197,6 +211,7 @@ export async function POST(request: NextRequest) {
               confidence: item.email.startsWith("info@") || item.email.startsWith("hello@") ? "medium" : "high",
             },
           ],
+          lead_status: "new",
         })
         .select("id")
         .single();
