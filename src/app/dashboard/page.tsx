@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils";
 import type { OutreachType } from "@/types";
 import { DASHBOARD_CREDITS_KEY } from "@/lib/use-dashboard-credits";
 import { EmailCountStepper } from "@/components/email-count-stepper";
-import { TRUSTED_BY_BUSINESSES_LABEL } from "@/config/trusted-businesses";
 
 type ProspectLead = {
   email: string;
@@ -387,33 +386,27 @@ export default function DashboardPage() {
   }
 
   return (
-    <div
-      className={cn(
-        "mx-auto w-full max-w-5xl px-4 md:px-6 md:py-8",
-        !prospectResult &&
-          "flex min-h-[calc(100dvh-5rem)] flex-col justify-center py-5 md:block md:min-h-0 md:justify-start md:py-8",
-        prospectResult && "py-4"
-      )}
-    >
+    <div className="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-8">
       <div className="mb-6 hidden md:block sm:mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-display sm:font-black">Dashboard</h1>
         <p className="text-ink-500 mt-1">Your proposal command center</p>
       </div>
 
-      <div
-        className={cn(
-          "w-full",
-          !prospectResult && "flex flex-col gap-4 md:contents"
-        )}
-      >
       <section
         ref={searchSectionRef}
         className={cn(
           "rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white",
           hasCreatedAnything ? "p-4 md:p-6" : "p-4 md:p-8",
-          !prospectResult ? "mb-0 md:mb-8" : "mb-4 md:mb-8"
+          !prospectResult ? "mb-0 md:mb-8" : "mb-4 md:mb-8",
+          !prospectResult && "flex max-md:min-h-[calc(100dvh-5rem)] flex-col md:block"
         )}
       >
+        <div
+          className={cn(
+            "md:contents",
+            !prospectResult && "flex min-h-0 flex-1 flex-col"
+          )}
+        >
         <h2
           className={cn(
             "font-black text-ink-900",
@@ -542,11 +535,29 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {progress && (
+          <div className="mt-3 space-y-1.5">
+            <div className="flex items-center gap-2">
+              {prospectLoading && (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />
+              )}
+              <p className="text-sm font-medium text-brand-700">{progress}</p>
+            </div>
+            {prospectLoading && processingCounter > 0 && (
+              <p className="text-xs text-ink-500">Found {processingCounter} of {targetCount} emails...</p>
+            )}
+          </div>
+        )}
+        {prospectError && <p className="mt-3 text-sm text-red-600">{prospectError}</p>}
+        </div>
+
         {credits !== null && (
           <Link
             href="/pricing"
             className={cn(
-              "mt-3.5 flex flex-wrap items-baseline gap-x-1.5 border-t border-brand-100/80 pt-3.5 text-sm md:hidden",
+              "flex flex-wrap items-baseline gap-x-1.5 border-t border-brand-100/80 pt-3 text-sm md:hidden",
+              !prospectResult && "mt-auto max-md:shrink-0",
+              prospectResult && "mt-3.5",
               credits === 0 ? "text-red-700" : "text-ink-700"
             )}
           >
@@ -570,29 +581,7 @@ export default function DashboardPage() {
             </span>
           </Link>
         )}
-
-        {progress && (
-          <div className="mt-3 space-y-1.5">
-            <div className="flex items-center gap-2">
-              {prospectLoading && (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />
-              )}
-              <p className="text-sm font-medium text-brand-700">{progress}</p>
-            </div>
-            {prospectLoading && processingCounter > 0 && (
-              <p className="text-xs text-ink-500">Found {processingCounter} of {targetCount} emails...</p>
-            )}
-          </div>
-        )}
-        {prospectError && <p className="mt-3 text-sm text-red-600">{prospectError}</p>}
       </section>
-
-      {!prospectResult && (
-        <p className="text-center text-[11px] leading-relaxed text-ink-400 md:hidden">
-          Trusted by {TRUSTED_BY_BUSINESSES_LABEL} businesses worldwide
-        </p>
-      )}
-      </div>
 
       {prospectResult && (
         <section className="card p-4 mb-8 sm:p-5">
